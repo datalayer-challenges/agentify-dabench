@@ -71,8 +71,6 @@ The system uses environment variables for configuration. Copy `.env.example` to 
 
 ```bash
 # Agent Settings
-AGENT_ORGANIZATION=YourOrganization
-AGENT_PROVIDER_URL=https://your-provider.com
 
 # LLM Configuration (LiteLLM supports 100+ providers)
 LLM_API_KEY=your_api_key_here
@@ -81,10 +79,6 @@ LLM_MODEL=gpt-3.5-turbo               # Any LiteLLM-supported model
 # For Azure OpenAI (additional config)
 AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
 AZURE_OPENAI_API_VERSION=2024-02-15-preview
-
-# Optional MCP Tools
-MCP_SERVER_URL=http://localhost:3000
-MCP_SERVER_ENABLED=false
 ```
 
 ### Supported LLM Providers (via LiteLLM)

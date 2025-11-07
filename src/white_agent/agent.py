@@ -106,7 +106,7 @@ class DABStepWhiteWorker(Worker[Context]):
             print(f"🧠 Creating Pydantic AI agent with model: {pydantic_model}")
             self.agent = Agent(
                 model=pydantic_model,
-                toolsets=[mcp_server],
+                # toolsets=[mcp_server],
                 system_prompt="""You are an AI data analyst with access to MCP tools for data analysis.
                 
 Available data files in /data/context/:
@@ -180,22 +180,22 @@ Use the MCP tools to execute Python code and analyze data. Always provide clear,
                 
                 # Try the execution
                 ### NOT WORKING DUE TO ??? TO FIX TODO
-                ### result = await self.agent.run(question)
-                
+                result = await self.agent.run(question)
+
                 ####### TO DELETE AFTER DEBUGGING
-                # Create a mock result object that mimics Pydantic AI's response structure
-                class MockResult:
-                    def __init__(self, data):
-                        self.data = data
+                # # Create a mock result object that mimics Pydantic AI's response structure
+                # class MockResult:
+                #     def __init__(self, data):
+                #         self.data = data
                 
-                result = MockResult("NL")  # Placeholder with .data attribute
+                # result = MockResult("NL")  # Placeholder with .data attribute
                 #######
                 
                 print(f"✅ Agent execution completed!")
                 print(f"📤 Pydantic AI result type: {type(result)}")
                 print(f"📤 Pydantic AI result: {result}")
-                print(f"📤 Pydantic AI result.data: {result.data}")
-                answer = str(result.data)
+                print(f"📤 Pydantic AI result.output: {result.output}")
+                answer = str(result.output)
                 
                 print(f"💡 Generated answer: {answer}")
                 
