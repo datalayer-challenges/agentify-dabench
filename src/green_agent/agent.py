@@ -196,22 +196,6 @@ Example: "Please evaluate the agent at http://localhost:8001 using these tasks: 
             kind='message',
             message_id=str(uuid.uuid4())
         )
-    
-    async def _get_context_files_info(self) -> str:
-        """Get information about available context files."""
-        import os
-        context_dir = "./agent-workings/data"
-        
-        if not os.path.exists(context_dir):
-            return "No context files available."
-        
-        files_info = []
-        for filename in os.listdir(context_dir):
-            filepath = os.path.join(context_dir, filename)
-            if os.path.isfile(filepath):
-                files_info.append(f"- {filename}: Available in {filepath}")
-        
-        return "\n".join(files_info) if files_info else "No context files available."
 
     async def _evaluate_agent(self, eval_request: dict) -> dict:
         """Evaluate an agent using DABSTEP tasks."""
@@ -244,9 +228,6 @@ Example: "Please evaluate the agent at http://localhost:8001 using these tasks: 
             except Exception as e:
                 raise Exception(f"Failed to connect to white agent: {e}")
             
-            # Load context files information
-            context_files_info = await self._get_context_files_info()
-            
             # Process each task
             for i, task in enumerate(tasks):
                 print(f"📋 Task {i+1}/{len(tasks)}: {task.get('task_id', f'task_{i}')}")
@@ -254,8 +235,6 @@ Example: "Please evaluate the agent at http://localhost:8001 using these tasks: 
                 try:
                     # Create task message for white agent with context
                     task_prompt = f"""You are an expert data analyst and you will answer factoid questions by loading and referencing the files/documents listed below.
-You have these files available:
-{context_files_info}
 Don't forget to reference any documentation in the data dir before answering a question.
 
 Here is the question you need to answer:
@@ -285,7 +264,7 @@ Here are the guidelines you must follow when answering the question above:
                         task_id = agent_task['id']
                         
                         # Wait for completion with enhanced polling and logging
-                        max_wait_time = 300  # Maximum wait time in seconds (5 minutes)
+                        max_wait_time = 600  # Maximum wait time in seconds (10 minutes)
                         poll_interval = 10   # Check every 10 seconds
                         elapsed_time = 0
                         last_status = None
