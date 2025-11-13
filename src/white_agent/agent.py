@@ -21,6 +21,9 @@ from fasta2a import FastA2A, Skill, Worker
 from fasta2a.broker import InMemoryBroker
 from fasta2a.storage import InMemoryStorage
 from fasta2a.schema import Artifact, Message, TaskIdParams, TaskSendParams, TextPart, DataPart, AgentProvider
+import logging
+
+logging.getLogger("pydantic_ai").setLevel(logging.DEBUG)
 
 # Pydantic AI imports for MCP integration
 try:
@@ -71,11 +74,11 @@ class DABStepWhiteWorker(Worker[Context]):
         self.base_url = base_url
         self.mcp_url = f"{base_url}/mcp"
         self.agent = None
-        self._setup_agent()
+        self._agent_setup_complete = False
         print("✅ DABStepWhiteWorker initialized")
     
-    def _setup_agent(self):
-        """Setup the Pydantic AI agent with MCP tools."""
+    async def _setup_agent(self):
+        """Setup the Pydantic AI agent with MCP tools in async context."""
         try:
             print(f"🔧 Setting up Pydantic AI MCP client connecting to: {self.mcp_url}")
             
@@ -106,10 +109,10 @@ class DABStepWhiteWorker(Worker[Context]):
             print(f"🧠 Creating Pydantic AI agent with model: {pydantic_model}")
             self.agent = Agent(
                 model=pydantic_model,
-                # toolsets=[mcp_server],
+                toolsets=[mcp_server],
                 system_prompt="""You are an AI data analyst with access to MCP tools for data analysis.
-                
-Available data files in /data/context/:
+
+Available data files in data directory:
 - payments.csv (transaction data)
 - acquirer_countries.csv (country data)  
 - merchant_category_codes.csv (merchant codes)
@@ -117,14 +120,11 @@ Available data files in /data/context/:
 - fees.json (fee information)
 
 Your workflow should be:
-1. First explore what data files are available using list_files
+1. List files using list_files to see available datasets
 2. Load and examine relevant datasets using execute_code
 3. Perform analysis step by step with execute_code
-4. Provide a clear final answer
-
-Use the MCP tools to execute Python code and analyze data. Always provide clear, concise answers."""
-            )
-            
+4. Provide a concise final answer based on your analysis
+""")
             print("✅ Pydantic AI MCP agent setup complete")
             
         except Exception as e:
@@ -164,37 +164,29 @@ Use the MCP tools to execute Python code and analyze data. Always provide clear,
             
             print(f"🤔 Received question: {question}")
             
-            # Process question using Pydantic AI with MCP tools - Simple!
+            # Setup agent if not already done (async context required)
+            if not self._agent_setup_complete:
+                print("🔧 Setting up agent in async context...")
+                await self._setup_agent()
+                self._agent_setup_complete = True
+            
+            # Process question using Pydantic AI with MCP tools
             if not self.agent:
                 raise Exception("Pydantic AI agent not initialized")
                 
             print(f"🤖 Processing with Pydantic AI agent...")
+            print(f"🚀 Starting agent execution...")
+            print(f"🔍 Agent object: {type(self.agent)}")
+            print(f"🔍 Question: {question[:100]}...")
+            
             try:
-                # Run the agent directly without timeout wrapper to avoid cancellation scope issues
-                print(f"🚀 Starting agent execution...")
-                print(f"🔍 Agent object: {type(self.agent)}")
-                print(f"🔍 Question: {question[:100]}...")
-                
-                # Test if agent is responsive
-                print(f"🔍 Testing agent responsiveness...")
-                
-                # Try the execution
-                ### NOT WORKING DUE TO ??? TO FIX TODO
+                # Execute the agent directly - same as test_simple_agent.py
+                print(f"🤖 Executing agent directly...")
                 result = await self.agent.run(question)
-
-                ####### TO DELETE AFTER DEBUGGING
-                # # Create a mock result object that mimics Pydantic AI's response structure
-                # class MockResult:
-                #     def __init__(self, data):
-                #         self.data = data
-                
-                # result = MockResult("NL")  # Placeholder with .data attribute
-                #######
                 
                 print(f"✅ Agent execution completed!")
                 print(f"📤 Pydantic AI result type: {type(result)}")
-                print(f"📤 Pydantic AI result: {result}")
-                print(f"📤 Pydantic AI result.output: {result.output}")
+                print(f"📤 Pydantic AI result output: {result.output}")
                 answer = str(result.output)
                 
                 print(f"💡 Generated answer: {answer}")
@@ -204,12 +196,7 @@ Use the MCP tools to execute Python code and analyze data. Always provide clear,
                 print(f"🔍 Error type: {type(e)}")
                 import traceback
                 traceback.print_exc()
-                
-                # For cancellation errors, try to provide a meaningful response
-                if "cancel" in str(e).lower() or "scope" in str(e).lower():
-                    answer = "Error: Agent execution was interrupted due to async cancellation"
-                else:
-                    answer = f"Error during AI processing: {str(e)}"
+                answer = f"Error during AI processing: {str(e)}"
             
             # Create response message
             response_message = self._create_response_message(answer)

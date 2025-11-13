@@ -27,6 +27,9 @@ from starlette.responses import Response
 
 import sys
 import os
+import logging
+
+logging.getLogger("pydantic_ai").setLevel(logging.DEBUG)
 
 # Load environment variables from .env file
 try:
@@ -197,7 +200,7 @@ Example: "Please evaluate the agent at http://localhost:8001 using these tasks: 
     async def _get_context_files_info(self) -> str:
         """Get information about available context files."""
         import os
-        context_dir = "/Users/eleonorecharles/Desktop/dabstep/data/context"
+        context_dir = "./agent-workings/data"
         
         if not os.path.exists(context_dir):
             return "No context files available."
@@ -281,58 +284,127 @@ Here are the guidelines you must follow when answering the question above:
                         agent_task = response['result']
                         task_id = agent_task['id']
                         
-                        # Wait for completion
-                        await asyncio.sleep(3)  # Give agent time to process
+                        # Wait for completion with enhanced polling and logging
+                        max_wait_time = 300  # Maximum wait time in seconds (5 minutes)
+                        poll_interval = 10   # Check every 10 seconds
+                        elapsed_time = 0
+                        last_status = None
                         
+                        print(f"   ⏳ Waiting for white agent to complete task...")
+                        print(f"   📊 Max wait time: {max_wait_time}s, polling every {poll_interval}s")
+                        
+                        while elapsed_time < max_wait_time:
+                            await asyncio.sleep(poll_interval)
+                            elapsed_time += poll_interval
+                            
+                            try:
+                                task_response = await client.get_task(task_id)
+                                
+                                if 'result' in task_response:
+                                    final_task = task_response['result']
+                                    task_status = final_task.get('status', {}).get('state', 'unknown')
+                                    
+                                    # Only log status changes or every 30 seconds to reduce noise
+                                    if task_status != last_status or elapsed_time % 30 == 0:
+                                        if task_status == 'working':
+                                            print(f"   🔄 White agent working... ({elapsed_time}s elapsed)")
+                                        elif task_status == 'submitted':
+                                            print(f"   📝 White agent processing... ({elapsed_time}s elapsed)")
+                                        else:
+                                            print(f"   ⏱️ White agent status: {task_status} ({elapsed_time}s elapsed)")
+                                        last_status = task_status
+                                    
+                                    if task_status == 'completed':
+                                        print(f"   ✅ White agent completed task after {elapsed_time}s")
+                                        break
+                                    elif task_status == 'failed':
+                                        print(f"   ❌ White agent task failed after {elapsed_time}s")
+                                        break
+                                    elif task_status in ['working', 'submitted']:
+                                        continue  # Keep waiting
+                                    else:
+                                        print(f"   ⚠️ Unknown white agent task status: {task_status}")
+                                        break
+                                else:
+                                    print(f"   ❌ Failed to get white agent task status: {task_response.get('error', 'Unknown error')}")
+                                    break
+                            except Exception as e:
+                                print(f"   ⚠️ Error checking white agent status: {e}")
+                                # Continue trying instead of breaking
+                        
+                        if elapsed_time >= max_wait_time:
+                            print(f"   ⏰ White agent task timed out after {max_wait_time}s")
+                        
+                        # Get final task result and extract answer
+                        print(f"   📥 Retrieving final result from white agent...")
                         task_response = await client.get_task(task_id)
                         
                         if 'result' in task_response:
                             final_task = task_response['result']
                             
-                            # Extract agent's answer
+                            # Extract agent's answer with detailed logging
+                            print(f"   🔍 Extracting answer from white agent response...")
                             agent_answer = self._extract_agent_answer(final_task)
                             
                             if agent_answer:
-                                # Score using DABSTEP
-                                score = question_scorer(agent_answer, task['correct_answer'])
+                                print(f"   💬 White agent answered: '{agent_answer}'")
+                                print(f"   ✓ Expected answer: '{task['correct_answer']}'")
+                                
+                                # Get baseline DABSTEP score
+                                dabstep_score = question_scorer(agent_answer, task['correct_answer'])
+                                print(f"   � DABSTEP baseline score: {'✅' if dabstep_score else '❌'}")
                                 
                                 # Enhanced analysis with LLM if available
                                 llm_analysis = None
+                                final_score = dabstep_score  # Default to DABSTEP score
+                                
                                 if self.llm_client:
                                     try:
+                                        print(f"   🤖 Running LLM analysis for final scoring...")
                                         llm_analysis = await self._analyze_with_llm(
                                             task['question'], 
                                             agent_answer, 
+                                            task['guidelines'],
                                             task['correct_answer']
                                         )
+                                        if llm_analysis:
+                                            # Use LLM analysis as the final score
+                                            final_score = llm_analysis.get('correct', dabstep_score)
+                                            print(f"   🧠 LLM final score: {'✅' if final_score else '❌'}")
+                                            if final_score != dabstep_score:
+                                                print(f"   🔄 LLM overrode DABSTEP score!")
+                                        else:
+                                            print(f"   🧠 LLM analysis returned None, using DABSTEP score")
                                     except Exception as e:
-                                        print(f"   ⚠️  LLM analysis failed: {e}")
+                                        print(f"   ⚠️ LLM analysis failed: {e}")
+                                        llm_analysis = None
                                 
                                 task_result = {
                                     'task_id': task.get('task_id', f'task_{i}'),
                                     'question': task['question'],
                                     'agent_answer': agent_answer,
                                     'correct_answer': task['correct_answer'],
-                                    'score': score,
+                                    'score': final_score,  # Use final score (LLM or DABSTEP fallback)
+                                    'dabstep_score': dabstep_score,  # Keep DABSTEP for reference
                                     'level': task.get('level', 'unknown'),
                                     'llm_analysis': llm_analysis
                                 }
                                 
                                 task_results.append(task_result)
-                                if score:
+                                if final_score:
                                     correct_count += 1
                                 
-                                print(f"   Answer: {agent_answer}")
-                                print(f"   Score: {'✅ CORRECT' if score else '❌ INCORRECT'}")
+                                print(f"   📊 Final Result: {'✅ CORRECT' if final_score else '❌ INCORRECT'}")
                                 
                                 # Show LLM analysis if available
                                 if llm_analysis and isinstance(llm_analysis, dict):
                                     if 'reasoning_analysis' in llm_analysis:
-                                        print(f"   🤖 Analysis: {llm_analysis['reasoning_analysis']}")
+                                        print(f"   🧠 Analysis: {llm_analysis['reasoning_analysis']}")
                                     if 'confidence' in llm_analysis:
-                                        print(f"   📊 Confidence: {llm_analysis['confidence']:.2f}")
+                                        print(f"   🧠 Confidence: {llm_analysis['confidence']:.2f}")
                             else:
-                                print(f"   ⚠️  Could not extract answer")
+                                print(f"   ⚠️ Could not extract answer from white agent response")
+                                print(f"   🔍 Response structure: {type(final_task).__name__} with keys: {list(final_task.keys()) if isinstance(final_task, dict) else 'N/A'}")
                                 task_results.append({
                                     'task_id': task.get('task_id', f'task_{i}'),
                                     'question': task['question'],
@@ -342,7 +414,8 @@ Here are the guidelines you must follow when answering the question above:
                                     'level': task.get('level', 'unknown')
                                 })
                         else:
-                            print(f"   ❌ Task failed: {task_response.get('error', 'Unknown error')}")
+                            print(f"   ❌ White agent task failed: {task_response.get('error', 'Unknown error')}")
+                            print(f"   🔍 Full response: {task_response}")
                             task_results.append({
                                 'task_id': task.get('task_id', f'task_{i}'),
                                 'question': task['question'],
@@ -352,7 +425,8 @@ Here are the guidelines you must follow when answering the question above:
                                 'level': task.get('level', 'unknown')
                             })
                     else:
-                        print(f"   ❌ Message send failed: {response.get('error', 'Unknown error')}")
+                        print(f"   ❌ Failed to send message to white agent: {response.get('error', 'Unknown error')}")
+                        print(f"   🔍 Full response: {response}")
                         task_results.append({
                             'task_id': task.get('task_id', f'task_{i}'),
                             'question': task['question'],
@@ -363,7 +437,10 @@ Here are the guidelines you must follow when answering the question above:
                         })
                         
                 except Exception as e:
-                    print(f"   ❌ Error: {e}")
+                    print(f"   ❌ Exception during task execution: {e}")
+                    print(f"   🔍 Exception type: {type(e).__name__}")
+                    import traceback
+                    print(f"   📍 Traceback: {traceback.format_exc()}")
                     task_results.append({
                         'task_id': task.get('task_id', f'task_{i}'),
                         'question': task['question'],
@@ -474,54 +551,89 @@ Here are the guidelines you must follow when answering the question above:
         
         return artifacts
     
-    async def _analyze_with_llm(self, question: str, agent_answer: str, correct_answer: str) -> Dict[str, Any]:
+    async def _analyze_with_llm(self, question: str, agent_answer: str, guidelines: str, correct_answer: str) -> Dict[str, Any]:
         """Use LLM to provide detailed analysis of the agent's performance."""
-        if not self.llm_client:
-            return {"analysis": "LLM analysis not available", "confidence": 0.5}
-        
-        try:
-            analysis_prompt = f"""
+
+        analysis_prompt = f"""
 Analyze this DABSTEP evaluation result:
 
 Question: {question}
+Guidelines: {guidelines}
 Agent's Answer: {agent_answer}
 Correct Answer: {correct_answer}
 
-Please provide:
-1. Whether the agent's answer is correct (yes/no)
-2. Analysis of the reasoning quality
-3. Suggestions for improvement
-4. Confidence score (0-1)
+Please provide a JSON response with the following structure:
+{{
+    "correct": true/false,
+    "reasoning_analysis": "your detailed analysis here",
+    "suggestions": "your suggestions for improvement",
+    "confidence": 0.0-1.0
+}}
 
-Format as JSON with keys: correct, reasoning_analysis, suggestions, confidence
+IMPORTANT: Respond ONLY with valid JSON. Do not include any text before or after the JSON.
 """
             
+        try:
             # Use LiteLLM's unified interface
             response = await self.llm_client.acompletion(
                 model=self.model_name,
                 messages=[
-                    {"role": "system", "content": "You are an expert evaluator analyzing AI agent performance on DABSTEP benchmark tasks. Provide detailed, constructive analysis."},
+                    {"role": "system", "content": "You are an expert evaluator. You must respond with valid JSON only, no additional text."},
                     {"role": "user", "content": analysis_prompt}
                 ],
-                max_tokens=300
+                max_tokens=500,
+                temperature=0.1  # Lower temperature for more consistent JSON output
             )
-            analysis_text = response.choices[0].message.content.strip()
             
-            # Try to parse JSON response
-            try:
-                import json
-                analysis_data = json.loads(analysis_text)
-                return analysis_data
-            except json.JSONDecodeError:
-                return {
-                    "analysis": analysis_text,
-                    "confidence": 0.7
-                }
+            # Extract and validate response content
+            if not response or not response.choices or not response.choices[0] or not response.choices[0].message:
+                print(f"      ⚠️ LLM returned invalid response structure")
+                return None
+            
+            analysis_text = response.choices[0].message.content
+            
+            if not analysis_text or not analysis_text.strip():
+                print(f"      ⚠️ LLM returned empty content")
+                return None
+            
+            analysis_text = analysis_text.strip()
+            
+            # Try to clean up the response if it has markdown formatting
+            if analysis_text.startswith("```json"):
+                analysis_text = analysis_text[7:]  # Remove ```json
+            if analysis_text.startswith("```"):
+                analysis_text = analysis_text[3:]   # Remove ```
+            if analysis_text.endswith("```"):
+                analysis_text = analysis_text[:-3]  # Remove trailing ```
+            
+            analysis_text = analysis_text.strip()
+            
+            # Try to parse as JSON
+            analysis_data = json.loads(analysis_text)
+            
+            # Validate that it's a dictionary
+            if not isinstance(analysis_data, dict):
+                print(f"      ⚠️ LLM response is not a JSON object: {type(analysis_data)}")
+                return None
+            
+            # Validate required keys exist
+            required_keys = ['correct', 'reasoning_analysis', 'suggestions', 'confidence']
+            missing_keys = [key for key in required_keys if key not in analysis_data]
+            if missing_keys:
+                print(f"      ⚠️ LLM response missing required keys: {missing_keys}")
+                return None
+            
+            return analysis_data
+                
+        except json.JSONDecodeError as e:
+            print(f"      ⚠️ Failed to parse LLM response as JSON: {e}")
+            print(f"      📝 Raw LLM response: '{analysis_text[:200]}{'...' if len(analysis_text) > 200 else ''}'")
+            return None
                 
         except Exception as e:
-            print(f"⚠️  LLM analysis error: {e}")
-            return {"analysis": f"Analysis error: {str(e)}", "confidence": 0.3}
-
+            print(f"      ⚠️ LLM analysis failed: {e}")
+            return None
+        
     def _extract_text_from_parts(self, parts: List[Any]) -> str:
         """Extract text from message parts."""
         text_parts = []

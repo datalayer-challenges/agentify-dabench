@@ -22,6 +22,9 @@ import time
 import signal
 from typing import Optional, List, Dict, Any
 from pathlib import Path
+import logging
+
+logging.getLogger("pydantic_ai").setLevel(logging.DEBUG)
 
 # Load environment variables
 try:
@@ -138,14 +141,12 @@ class DABStepLauncher:
             print(f"🔑 Using Jupyter token: {jupyter_token[:8]}...")
             
             # Start JupyterLab with token authentication (no login required)
-            # Set working directory to project root for context data access
             self.jupyter_process = subprocess.Popen([
                 "jupyter", "lab", 
-                f"--port={self.jupyter_port}", 
+                f"--port={self.jupyter_port}",
                 "--no-browser",
                 f"--IdentityProvider.token={jupyter_token}",
-                "--allow-root"  # Allow running as root if needed
-            ], cwd=project_root)
+            ], cwd=f"{project_root}/agent-workings")
             
             # Wait for startup
             await_time = 8
@@ -412,26 +413,50 @@ class DABStepLauncher:
                     task_id = str(response['result']['id'])
                     print(f"📋 Evaluation task created: {task_id}")
                     
-                    # Wait for completion with progress indicators
-                    print("⏳ Waiting for evaluation to complete...")
-                    for i in range(6):  # Check every 5 seconds for 30 seconds total
-                        await asyncio.sleep(5)
-                        print(f"   ⏱️  Waiting... ({(i+1)*5}s elapsed)")
-                        
-                        # Check if agents are still running
-                        if self.green_process and self.green_process.poll() is not None:
-                            print("⚠️  Green agent process has exited!")
-                        if self.white_process and self.white_process.poll() is not None:
-                            print("⚠️  White agent process has exited!")
-                    print("   ✅ Wait period completed")
+                    # Wait for actual completion instead of arbitrary timeout
+                    print("⏳ Waiting for green agent to complete evaluation...")
                     
-                    # Get results
-                    try:
-                        task_response = await client.get_task(task_id=task_id)
-                        print(f"📋 Task response: {task_response}")
-                    except Exception as e:
-                        print(f"❌ Get task error: {type(e).__name__}: {str(e)}")
-                        return False
+                    task_response = None
+                    max_wait_time = 28800  # 8 hours
+                    start_time = time.time()
+                    
+                    while True:
+                        # Safety check for timeout
+                        elapsed = time.time() - start_time
+                        if elapsed > max_wait_time:
+                            print(f"⚠️  Safety timeout reached ({max_wait_time}s), stopping wait")
+                            break
+                            
+                        try:
+                            # Check task status
+                            task_response = await client.get_task(task_id=task_id)
+                            
+                            if 'result' in task_response:
+                                final_task = task_response['result']
+                                task_status = final_task.get('status', {})
+                                task_state = task_status.get('state', 'unknown')
+                                
+                                if task_state == 'completed':
+                                    print("✅ Green agent completed evaluation!")
+                                    break
+                                elif task_state in ['failed', 'cancelled', 'error']:
+                                    print(f"❌ Task failed with state: {task_state}")
+                                    break
+                                else:
+                                    # Task still in progress
+                                    print(f"   🔄 Green agent working... (status: {task_state}, {elapsed:.0f}s elapsed)")
+                                    await asyncio.sleep(5)  # Brief wait before next check
+                            else:
+                                print(f"⚠️  Could not get task status: {task_response}")
+                                await asyncio.sleep(5)
+                                
+                        except Exception as e:
+                            print(f"❌ Error checking task status: {e}")
+                            # Still wait a bit and try again
+                            await asyncio.sleep(10)
+                    
+                    # We already have the final task_response from the loop above
+                    print(f"📋 Final task response: {task_response}")
                     
                     if 'result' in task_response:
                         final_task = task_response['result']
