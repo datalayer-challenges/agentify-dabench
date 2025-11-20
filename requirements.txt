@@ -5,6 +5,7 @@ pydantic>=2.0.0
 python-dotenv>=1.0.0
 litellm>=1.40.0
 pydantic-ai
+pydantic-evals
 jupyter-mcp-server>=0.15.0
 jupyterlab==4.4.1
 jupyter-collaboration==4.0.2

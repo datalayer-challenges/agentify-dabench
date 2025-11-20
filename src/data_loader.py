@@ -51,8 +51,8 @@ def load_dabstep_tasks(sample_mode: bool = True, data_dir: str = None) -> List[D
                     'task_id': str(task['task_id']),
                     'question': task['question'],
                     'correct_answer': task['answer'],
-                    'level': task.get('level', 'unknown'),
-                    'guidelines': task.get('guidelines', '')
+                    'level': task['level'],
+                    'guidelines': task['guidelines'],
                 }
                 
                 tasks.append(standardized_task)
@@ -85,30 +85,6 @@ def get_sample_tasks(num_tasks: int = 3) -> List[Dict[str, Any]]:
         return tasks[:num_tasks]
     except (FileNotFoundError, json.JSONDecodeError, KeyError) as e:
         print(f"⚠️  Could not load DABSTEP tasks: {e}")
-        # Fallback to hardcoded sample
-        return [
-            {
-                "task_id": "math_basic_1",
-                "question": "What is 15 + 27?",
-                "correct_answer": "42",
-                "level": "basic",
-                "guidelines": "Provide the numerical answer."
-            },
-            {
-                "task_id": "math_basic_2", 
-                "question": "Calculate 8 * 7",
-                "correct_answer": "56",
-                "level": "basic",
-                "guidelines": "Provide the numerical answer."
-            },
-            {
-                "task_id": "comparison_1",
-                "question": "Is 25 greater than 30?",
-                "correct_answer": "no",
-                "level": "basic",
-                "guidelines": "Answer with yes or no."
-            }
-        ]
 
 
 def validate_task_format(task: Dict[str, Any]) -> bool:
@@ -121,7 +97,7 @@ def validate_task_format(task: Dict[str, Any]) -> bool:
     Returns:
         True if valid, False otherwise
     """
-    required_fields = ['task_id', 'question', 'correct_answer']
+    required_fields = ['task_id', 'question', 'correct_answer', 'level', 'guidelines']
     return all(field in task for field in required_fields)
 
 

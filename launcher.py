@@ -339,27 +339,7 @@ class DABStepLauncher:
                 
             except (ImportError, FileNotFoundError) as e:
                 print(f"⚠️  Could not load DABSTEP data: {e}")
-                print("🔄 Falling back to hardcoded sample tasks...")
-                sample_tasks = [
-                    {
-                        "task_id": "math_basic_1",
-                        "question": "What is 15 + 27?",
-                        "correct_answer": "42",
-                        "level": "basic"
-                    },
-                    {
-                        "task_id": "math_basic_2", 
-                        "question": "Calculate 8 * 7",
-                        "correct_answer": "56",
-                        "level": "basic"
-                    },
-                    {
-                        "task_id": "comparison_1",
-                        "question": "Is 25 greater than 30?",
-                        "correct_answer": "no",
-                        "level": "basic"
-                    }
-                ]
+                sample_tasks = []
             
             # Create evaluation request
             eval_request = {

@@ -155,15 +155,7 @@ Your workflow should be:
             # Extract question from message
             message = params['message']
             print(f"📨 Received message: {message}")
-            
-            question = self._extract_question(message)
-            
-            if not question:
-                print("❌ No question found in message")
-                raise ValueError("No question found in message")
-            
-            print(f"🤔 Received question: {question}")
-            
+        
             # Setup agent if not already done (async context required)
             if not self._agent_setup_complete:
                 print("🔧 Setting up agent in async context...")
@@ -176,17 +168,14 @@ Your workflow should be:
                 
             print(f"🤖 Processing with Pydantic AI agent...")
             print(f"🚀 Starting agent execution...")
-            print(f"🔍 Agent object: {type(self.agent)}")
-            print(f"🔍 Question: {question[:100]}...")
             
             try:
                 # Execute the agent directly - same as test_simple_agent.py
                 print(f"🤖 Executing agent directly...")
+                question = self._extract_text_from_parts(message['parts'])
                 result = await self.agent.run(question)
                 
                 print(f"✅ Agent execution completed!")
-                print(f"📤 Pydantic AI result type: {type(result)}")
-                print(f"📤 Pydantic AI result output: {result.output}")
                 answer = str(result.output)
                 
                 print(f"💡 Generated answer: {answer}")
@@ -253,44 +242,6 @@ Your workflow should be:
         """Build artifacts from result."""
         return []
     
-    def _extract_question(self, message: Message) -> Optional[str]:
-        """Extract question from message."""
-        full_text = ""
-        
-        for part in message['parts']:
-            if part['kind'] == 'text':
-                full_text += part['text'] + " "
-            elif part['kind'] == 'data':
-                data = part.get('data', {})
-                if isinstance(data, dict):
-                    for key in ['question', 'query', 'task', 'prompt']:
-                        if key in data:
-                            full_text += str(data[key]) + " "
-                elif isinstance(data, str):
-                    full_text += data + " "
-        
-        # Extract question from various patterns
-        full_text = full_text.strip()
-        
-        # Look for different question patterns
-        patterns = [
-            "Here is the question you need to answer:",
-            "Question:",
-            "QUESTION:",
-            "Task:"
-        ]
-        
-        for pattern in patterns:
-            if pattern in full_text:
-                question_part = full_text.split(pattern, 1)[1]
-                # Split on common endings
-                for ending in ["Here are the guidelines", "Guidelines:", "Please provide", "\n\n"]:
-                    if ending in question_part:
-                        question_part = question_part.split(ending)[0]
-                        break
-                return question_part.strip()
-        
-        return full_text if full_text else None
     
     def _create_response_message(self, answer: str) -> Message:
         """Create response message with the answer."""
