@@ -1,0 +1,52 @@
+{
+  "metadata": {
+    "evaluation_time_seconds": 33.286288022994995,
+    "total_cases": 1,
+    "timestamp": "20251127_100703",
+    "success_rate": 1.0,
+    "generated_by": "Green Agent - Pydantic Eval"
+  },
+  "report": {
+    "name": "evaluate_white_agent",
+    "cases": [
+      {
+        "name": "0",
+        "inputs": "{\"question\": \"Calculate the mean fare paid by the passengers.\", \"constraints\": \"Calculate the mean fare using Python's built-in statistics module or appropriate statistical method in pandas. Rounding off the answer to two decimal places.\", \"format\": \"@mean_fare[mean_fare_value] where \\\"mean_fare_value\\\" is a floating-point number rounded to two decimal places.\", \"file_name\": \"test_ave.csv\", \"concepts\": [\"Summary Statistics\"]}",
+        "expected_output": "mean_fare: 34.65",
+        "output": "@mean_fare[34.65]",
+        "metadata": {
+          "level": "easy",
+          "task_id": "0",
+          "question": "Calculate the mean fare paid by the passengers."
+        },
+        "scores": {},
+        "labels": {},
+        "metrics": {}
+      }
+    ],
+    "failures": [],
+    "experiment_metadata": null,
+    "total_cases": 1,
+    "successful_cases": 1,
+    "failed_cases": 0,
+    "success_rate": 1.0,
+    "formatted_summary": [
+      "                               Evaluation Summary: evaluate_white_agent                               ",
+      "┏━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┓",
+      "┃ Case ID  ┃ Expected Output  ┃ Outputs           ┃ Assertions                            ┃ Duration ┃",
+      "┡━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━┩",
+      "│ 0        │ mean_fare: 34.65 │ @mean_fare[34.65] │ LLMJudge: ✔                           │    30.1s │",
+      "│          │                  │                   │   Reason: The output                  │          │",
+      "│          │                  │                   │ '@mean_fare[34.65]' conveys the       │          │",
+      "│          │                  │                   │ correct calculated value of 34.65 but │          │",
+      "│          │                  │                   │ does not conform to the expected      │          │",
+      "│          │                  │                   │ format 'mean_fare: 34.65'.            │          │",
+      "│          │                  │                   │                                       │          │",
+      "│          │                  │                   │                                       │          │",
+      "├──────────┼──────────────────┼───────────────────┼───────────────────────────────────────┼──────────┤",
+      "│ Averages │                  │                   │ 100.0% ✔                              │    30.1s │",
+      "└──────────┴──────────────────┴───────────────────┴───────────────────────────────────────┴──────────┘",
+      ""
+    ]
+  }
+}

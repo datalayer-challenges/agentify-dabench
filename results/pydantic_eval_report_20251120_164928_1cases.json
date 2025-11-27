@@ -1,0 +1,12 @@
+{
+  "metadata": {
+    "evaluation_time_seconds": 133.73842000961304,
+    "total_cases": 1,
+    "timestamp": "20251120_164928",
+    "success_rate": null,
+    "generated_by": "Green Agent - Pydantic Eval"
+  },
+  "report": {
+    "report_text": "        Evaluation Summary:         \n        evaluate_white_agent        \n┏━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━┓\n┃ Case ID  ┃ Assertions ┃ Duration ┃\n┡━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━┩\n│ 0        │ ✗          │   130.2s │\n├──────────┼────────────┼──────────┤\n│ Averages │ 0.0% ✔     │   130.2s │\n└──────────┴────────────┴──────────┘\n"
+  }
+}

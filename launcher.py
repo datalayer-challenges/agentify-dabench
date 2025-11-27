@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-DABSTEP AgentBeats Launcher
+AgentBeats Launcher
 
 This script launches both the green agent (evaluator) and white agent (test subject)
-and provides a simple interface to run DABSTEP evaluations.
+and provides a simple interface to run evaluations.
 
 Usage:
     python launcher.py                    # Start both agents
@@ -22,9 +22,6 @@ import time
 import signal
 from typing import Optional, List, Dict, Any
 from pathlib import Path
-import logging
-
-logging.getLogger("pydantic_ai").setLevel(logging.DEBUG)
 
 # Load environment variables
 try:
@@ -46,8 +43,8 @@ except ImportError:
     sys.exit(1)
 
 
-class DABStepLauncher:
-    """Manages launching and coordinating DABSTEP agents."""
+class Launcher:
+    """Manages launching and coordinating agents."""
     
     def __init__(self):
         self.green_process: Optional[subprocess.Popen] = None
@@ -57,6 +54,13 @@ class DABStepLauncher:
         self.white_port = 8001
         self.jupyter_port = 8888  # Standard Jupyter port
         self.jupyter_token: Optional[str] = None
+        
+        # Setup logging
+        self.log_dir = project_root / "logs"
+        self.log_dir.mkdir(exist_ok=True)
+        self.green_log_handle: Optional[Any] = None
+        self.white_log_handle: Optional[Any] = None
+        self.jupyter_log_handle: Optional[Any] = None
     
     def start_green_agent(self) -> bool:
         """Start the green agent (evaluator)."""
@@ -68,12 +72,15 @@ class DABStepLauncher:
                 print(f"❌ Green agent directory not found: {green_dir}")
                 return False
             
-            # Start agent with real-time output (no piping)
-            print("📝 Green agent logs will be shown in real-time:")
-            print("─" * 50)
+            # Setup logging
+            green_log_path = self.log_dir / "green_agent.log"
+            print(f"📝 Green agent logs will be written to: {green_log_path}")
+            self.green_log_handle = open(green_log_path, "w")
+            
+            # Start agent
             self.green_process = subprocess.Popen([
                 sys.executable, "agent.py"
-            ], cwd=green_dir)
+            ], cwd=green_dir, stdout=self.green_log_handle, stderr=subprocess.STDOUT)
             
             # Wait for startup
             await_time = 5
@@ -103,12 +110,15 @@ class DABStepLauncher:
                 print(f"❌ White agent directory not found: {white_dir}")
                 return False
             
-            # Start agent with real-time output (no piping)
-            print("📝 White agent logs will be shown in real-time:")
-            print("─" * 50)
+            # Setup logging
+            white_log_path = self.log_dir / "white_agent.log"
+            print(f"📝 White agent logs will be written to: {white_log_path}")
+            self.white_log_handle = open(white_log_path, "w")
+            
+            # Start agent
             self.white_process = subprocess.Popen([
                 sys.executable, "agent.py"
-            ], cwd=white_dir)
+            ], cwd=white_dir, stdout=self.white_log_handle, stderr=subprocess.STDOUT)
             
             # Wait for startup
             await_time = 5
@@ -140,13 +150,18 @@ class DABStepLauncher:
             
             print(f"🔑 Using Jupyter token: {jupyter_token[:8]}...")
             
+            # Setup logging
+            jupyter_log_path = self.log_dir / "jupyter_mcp.log"
+            print(f"📝 JupyterLab logs will be written to: {jupyter_log_path}")
+            self.jupyter_log_handle = open(jupyter_log_path, "w")
+            
             # Start JupyterLab with token authentication (no login required)
             self.jupyter_process = subprocess.Popen([
                 "jupyter", "lab", 
                 f"--port={self.jupyter_port}",
                 "--no-browser",
                 f"--IdentityProvider.token={jupyter_token}",
-            ], cwd=f"{project_root}/agent-workings")
+            ], cwd=f"{project_root}/agent-workings", stdout=self.jupyter_log_handle, stderr=subprocess.STDOUT)
             
             # Wait for startup
             await_time = 8
@@ -253,6 +268,14 @@ class DABStepLauncher:
                 self.white_process.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 self.white_process.kill()
+        
+        # Close log file handles
+        if self.green_log_handle:
+            self.green_log_handle.close()
+        if self.white_log_handle:
+            self.white_log_handle.close()
+        if self.jupyter_log_handle:
+            self.jupyter_log_handle.close()
     
     async def check_agent_health(self, url: str, name: str) -> bool:
         """Check if agent is healthy and responding."""
@@ -295,9 +318,9 @@ class DABStepLauncher:
             return False
     
     async def run_sample_evaluation(self, sample_mode: str = "quick", quick_sample_size: int = 3) -> bool:
-        """Run a DABSTEP evaluation with real data."""
+        """Run an evaluation with real data."""
         try:
-            print(f"\n🎯 Running DABSTEP Evaluation ({sample_mode} mode)...")
+            print(f"\n🎯 Running Evaluation ({sample_mode} mode)...")
             
             # Check agent health
             green_url = f"http://localhost:{self.green_port}"
@@ -310,7 +333,7 @@ class DABStepLauncher:
                 print("❌ Agents are not healthy, cannot run evaluation")
                 return False
             
-            # Load real DABSTEP tasks
+            # Load real DABench tasks
             try:
                 # Add src to path for importing data_loader
                 import sys
@@ -318,27 +341,27 @@ class DABStepLauncher:
                 if str(src_path) not in sys.path:
                     sys.path.append(str(src_path))
                 
-                from data_loader import load_dabstep_tasks, get_sample_tasks, get_task_statistics
+                from data_loader import load_dabench_tasks, get_sample_tasks, get_task_statistics
                 
-                # Get tasks based on mode
+                # Get tasks based on mode - use DABench only
                 if sample_mode == "quick":
                     sample_tasks = get_sample_tasks(quick_sample_size)
-                    print(f"📋 Using {len(sample_tasks)} quick sample tasks")
+                    print(f"📋 Using {len(sample_tasks)} quick sample DABench tasks")
                 elif sample_mode == "dev":
-                    sample_tasks = load_dabstep_tasks(sample_mode=True)  # dev.jsonl (10 tasks)
-                    print(f"📋 Using {len(sample_tasks)} development tasks")
+                    sample_tasks = load_dabench_tasks()  # Load all DABench dev tasks
+                    print(f"📋 Using {len(sample_tasks)} DABench development tasks")
                 elif sample_mode == "full":
-                    sample_tasks = load_dabstep_tasks(sample_mode=False)  # all.jsonl (450 tasks)
-                    print(f"📋 Using {len(sample_tasks)} full dataset tasks")
+                    sample_tasks = load_dabench_tasks()  # DABench only has dev set currently
+                    print(f"📋 Using {len(sample_tasks)} DABench tasks")
                 else:
-                    raise ValueError(f"Invalid sample mode: {sample_mode}")
+                    raise ValueError(f"Invalid sample mode: {sample_mode}. Use: quick, dev, full")
                 
                 # Show dataset statistics
                 stats = get_task_statistics(sample_tasks)
                 print(f"📊 Dataset stats: {stats['total']} tasks, levels: {stats['by_level']}")
                 
             except (ImportError, FileNotFoundError) as e:
-                print(f"⚠️  Could not load DABSTEP data: {e}")
+                print(f"⚠️  Could not load data: {e}")
                 sample_tasks = []
             
             # Create evaluation request
@@ -352,7 +375,7 @@ class DABStepLauncher:
                 role='user',
                 parts=[
                     TextPart(
-                        text="Please evaluate the white agent using the provided DABSTEP tasks.",
+                        text="Please evaluate the white agent using the provided tasks.",
                         kind='text'
                     ),
                     DataPart(data=eval_request, kind='data')
@@ -397,7 +420,7 @@ class DABStepLauncher:
                     print("⏳ Waiting for green agent to complete evaluation...")
                     
                     task_response = None
-                    max_wait_time = 28800  # 8 hours
+                    max_wait_time = 43200  # 12 hours
                     start_time = time.time()
                     
                     while True:
@@ -425,15 +448,15 @@ class DABStepLauncher:
                                 else:
                                     # Task still in progress
                                     print(f"   🔄 Green agent working... (status: {task_state}, {elapsed:.0f}s elapsed)")
-                                    await asyncio.sleep(5)  # Brief wait before next check
+                                    await asyncio.sleep(15)  # Brief wait before next check
                             else:
                                 print(f"⚠️  Could not get task status: {task_response}")
-                                await asyncio.sleep(5)
+                                await asyncio.sleep(15)
                                 
                         except Exception as e:
                             print(f"❌ Error checking task status: {e}")
                             # Still wait a bit and try again
-                            await asyncio.sleep(10)
+                            await asyncio.sleep(15)
                     
                     # We already have the final task_response from the loop above
                     print(f"📋 Final task response: {task_response}")
@@ -452,11 +475,11 @@ class DABStepLauncher:
                             if 'artifacts' in final_task:
                                 for artifact in final_task['artifacts']:
                                     print(f"📄 Artifact: {artifact.get('name', 'unknown')}")
-                                    if artifact.get('name') == 'dabstep_evaluation_summary':
+                                    if artifact.get('name') == 'evaluation_summary':
                                         for part in artifact.get('parts', []):
                                             if part.get('type') == 'data':
                                                 summary = part.get('data', {})
-                                                print(f"\n📊 DABSTEP Evaluation Results:")
+                                                print(f"\n📊 Evaluation Results:")
                                                 print(f"   Accuracy: {summary.get('accuracy', 0) * 100:.1f}%")
                                                 print(f"   Correct: {summary.get('correct_tasks', 0)}/{summary.get('total_tasks', 0)}")
                                                 print(f"   Time: {summary.get('time_used', 0):.2f}s")
@@ -536,7 +559,7 @@ class DABStepLauncher:
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
-        description="DABSTEP AgentBeats Launcher - A2A compatible DABSTEP benchmark evaluation",
+        description="AgentBeats Launcher - A2A compatible benchmark evaluation",
         epilog="""
 Examples:
   python launcher.py --evaluate                    # Quick evaluation (3 tasks)
@@ -552,17 +575,17 @@ Examples:
     parser.add_argument("--evaluate", action="store_true", help="Start agents and run evaluation")
     parser.add_argument("--interactive", action="store_true", help="Run in interactive mode")
     
-    # Dataset options
+    # Dataset options  
     parser.add_argument("--full-dataset", action="store_true", 
-                       help="Use full DABSTEP dataset (450 tasks)")
+                       help="Use full dataset")
     parser.add_argument("--quick-sample", type=int, default=3, metavar="N",
                        help="Number of tasks for quick testing (default: 3)")
     parser.add_argument("--sample-mode", choices=["quick", "dev", "full"], default="quick",
-                       help="Dataset mode: quick (3 tasks), dev (10 tasks), or full (450 tasks)")
+                       help="Dataset mode: quick (3 DABench), dev (DABench), full (DABench)")
     
     args = parser.parse_args()
     
-    launcher = DABStepLauncher()
+    launcher = Launcher()
     
     def signal_handler(signum, frame):
         print("\n🛑 Shutting down...")
@@ -573,7 +596,7 @@ Examples:
     signal.signal(signal.SIGTERM, signal_handler)
     
     try:
-        print("🚀 DABSTEP AgentBeats Launcher")
+        print("🚀 AgentBeats Launcher")
         print("=" * 40)
         
         success = True

@@ -1,5 +1,5 @@
 """
-DABSTEP Green Agent - A2A-compatible evaluator agent using Pydantic Eval.
+Green Agent - A2A-compatible evaluator agent using Pydantic Eval.
 
 This agent:
 1. Receives evaluation requests containing tasks and target agent URL
@@ -26,39 +26,35 @@ from pydantic_evals.evaluators import LLMJudge, Contains, EqualsExpected
 
 import sys
 import os
-import logging
 
-logging.getLogger("pydantic_ai").setLevel(logging.DEBUG)
 
 # Load environment variables from .env file
-try:
-    from dotenv import load_dotenv
-    # Load from project root
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-    dotenv_path = os.path.join(project_root, '.env')
-    load_dotenv(dotenv_path)
-    print(f"🔧 Green Agent loaded environment variables from {dotenv_path}")
-except ImportError:
-    print("⚠️  python-dotenv not installed, skipping .env file loading")
-except Exception as e:
-    print(f"⚠️  Failed to load .env file: {e}")
+from dotenv import load_dotenv
+# Load from project root
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+dotenv_path = os.path.join(project_root, '.env')
+load_dotenv(dotenv_path)
+print(f"🔧 Green Agent loaded environment variables from {dotenv_path}")
 
 # Import shared utils
 try:
-    from ..shared_utils import get_pydantic_ai_model
+    from ..shared_utils import get_pydantic_ai_model, setup_logger
 except ImportError:
     # Fallback for when running as script
     import sys
     import os
     sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-    from shared_utils import get_pydantic_ai_model
+    from shared_utils import get_pydantic_ai_model, setup_logger
+
+# Setup logger
+logger = setup_logger("green_agent")
 
 
 # Context type for the green agent
 Context = List[Message]
 
 
-class DABStepGreenWorker(Worker[Context]):
+class GreenWorker(Worker[Context]):
     """Green agent worker that evaluates other A2A agents using Pydantic Eval."""
     
     def __init__(self, broker, storage):
@@ -66,12 +62,16 @@ class DABStepGreenWorker(Worker[Context]):
         self.pydantic_ai_model = get_pydantic_ai_model()
     
     async def run_task(self, params: TaskSendParams) -> None:
-        """Execute a DABSTEP evaluation task using Pydantic Eval."""
+        """Execute an evaluation task using Pydantic Eval."""
+        logger.info(f"🔄 Green Agent received task: {params['id']}")
+        
         task = await self.storage.load_task(params['id'])
         if task is None:
+            logger.error(f"❌ Task {params['id']} not found in storage")
             await self.storage.update_task(params['id'], state='failed')
             return
         
+        logger.info(f"📝 Processing task {params['id']}")
         await self.storage.update_task(task['id'], state='working')
         
         try:
@@ -85,13 +85,13 @@ class DABStepGreenWorker(Worker[Context]):
             
             if eval_request:
                 # Handle evaluation request using Pydantic Eval
-                print("🔍 Processing DABSTEP evaluation request with Pydantic Eval...")
+                logger.info("🔍 Processing evaluation request with Pydantic Eval...")
                 report = await self._evaluate_agent_pydantic(eval_request)
                 response_message = self._create_response_message(report)
                 artifacts = self._create_response_artifacts(report)
             else:
                 # Handle simple message (like "hello")
-                print("💬 Processing simple message...")
+                logger.info("💬 Processing simple message...")
                 response_message = await self._handle_simple_message(message)
                 artifacts = []
             
@@ -104,8 +104,14 @@ class DABStepGreenWorker(Worker[Context]):
                 new_messages=[response_message],
                 new_artifacts=artifacts
             )
+            logger.info(f"✅ Task {task['id']} completed successfully")
             
         except Exception as e:
+            logger.error(f"❌ Error in task {task['id']}: {e}")
+            logger.error(f"📍 Exception type: {type(e).__name__}")
+            import traceback
+            logger.error(f"📍 Traceback: {traceback.format_exc()}")
+            
             # Handle errors
             error_message = Message(
                 role='agent',
@@ -114,12 +120,16 @@ class DABStepGreenWorker(Worker[Context]):
                 message_id=str(uuid.uuid4())
             )
             
-            await self.storage.update_context(task['context_id'], context + [error_message])
-            await self.storage.update_task(
-                task['id'],
-                state='failed',
-                new_messages=[error_message]
-            )
+            try:
+                await self.storage.update_context(task['context_id'], context + [error_message])
+                await self.storage.update_task(
+                    task['id'],
+                    state='failed',
+                    new_messages=[error_message]
+                )
+                logger.info(f"💾 Task {task['id']} marked as failed")
+            except Exception as storage_error:
+                logger.error(f"💥 Failed to save error state for task {task['id']}: {storage_error}")
     
     async def cancel_task(self, params: TaskIdParams) -> None:
         """Cancel an evaluation task."""
@@ -167,25 +177,25 @@ class DABStepGreenWorker(Worker[Context]):
         
         # Generate appropriate response based on content
         if any(greeting in user_text for greeting in ['hello', 'hi', 'hey', 'greetings']):
-            response_text = "Hello! I'm the DABSTEP Green Agent, an evaluator that can assess other AI agents using DABSTEP benchmark tasks with Pydantic Eval. How can I help you today?"
+            response_text = "Hello! I'm the Green Agent, an evaluator that can assess other AI agents using benchmark tasks with Pydantic Eval. How can I help you today?"
         elif 'test' in user_text or 'check' in user_text:
-            response_text = "I'm working properly! I can evaluate A2A agents using DABSTEP benchmark tasks with Pydantic Eval and LLM as judge. Send me an evaluation request with a white agent URL and tasks to get started."
+            response_text = "I'm working properly! I can evaluate A2A agents using benchmark tasks with Pydantic Eval and LLM as judge. Send me an evaluation request with a white agent URL and tasks to get started."
         elif any(word in user_text for word in ['help', 'what', 'how', 'explain']):
-            response_text = """I'm the DABSTEP Green Agent! Here's what I can do:
+            response_text = """I'm the Green Agent! Here's what I can do:
 
-🎯 **Primary Function**: Evaluate AI agents using DABSTEP benchmark tasks
+🎯 **Primary Function**: Evaluate AI agents using benchmark tasks
 📋 **Evaluation Process**: Send tasks to target agents and score their responses using Pydantic Eval
 📊 **Scoring**: Use LLM as judge with structured evaluation criteria
 🔍 **Framework**: Built on pydantic-evals for robust evaluation pipelines
 
 To run an evaluation, send me a message with:
 - `white_agent_url`: URL of the agent to test
-- `tasks`: Array of DABSTEP tasks with questions and correct answers
+- `tasks`: Array of tasks with questions and correct answers
 
 Example: "Please evaluate the agent at http://localhost:8001 using these tasks: [...]"
 """
         else:
-            response_text = f"I received your message: '{user_text}'. I'm specialized in evaluating AI agents using DABSTEP benchmark tasks with Pydantic Eval. Would you like me to run an evaluation?"
+            response_text = f"I received your message: '{user_text}'. I'm specialized in evaluating AI agents using benchmark tasks with Pydantic Eval. Would you like me to run an evaluation?"
         
         return Message(
             role='agent',
@@ -199,40 +209,54 @@ Example: "Please evaluate the agent at http://localhost:8001 using these tasks: 
         white_agent_url = eval_request['white_agent_url']
         tasks = eval_request['tasks']
         
-        print(f"🤖 Starting Pydantic Eval assessment of agent at {white_agent_url}")
-        print(f"📝 Evaluating {len(tasks)} tasks")
+        logger.info(f"🤖 Starting Pydantic Eval assessment of agent at {white_agent_url}")
+        logger.info(f"📝 Evaluating {len(tasks)} tasks")
         
         # Create timeout configuration for white agent communication
         import httpx
         timeout = httpx.Timeout(
             connect=30.0,   # Connection timeout: 30 seconds
-            read=600.0,     # Read timeout: 10 minutes (white agent can take time to analyze data)
+            read=1800.0,     # Read timeout: 30 minutes (data analysis can take time)
             write=30.0,     # Write timeout: 30 seconds
-            pool=30.0       # Pool timeout: 30 seconds
+            pool=None       # No pool timeout - create fresh connections
         )
         
         # Create evaluation function that calls the white agent
         async def evaluate_white_agent(task_input: str) -> str:
             """Function that sends tasks to the white agent and returns the response."""
+            http_client = None  # Initialize to None
             try:
-                # Parse task input to get question and guidelines
+                # Parse task input to get question and DABench data
                 task_data = json.loads(task_input)
                 question = task_data['question']
-                guidelines = task_data['guidelines']
+                constraints = task_data.get('constraints', '')
+                format_info = task_data.get('format', '')
+                file_name = task_data.get('file_name', '')
+                concepts = task_data.get('concepts', [])
                 
-                # Create task prompt for white agent
+                # Create task prompt for white agent using DABench format
                 task_prompt = f"""You are an expert data analyst and you will answer the question using the tools at your disposal.
 
 Here is the question you need to answer:
-{question}
+{question}"""
 
-Here are the guidelines you must follow:
-{guidelines}
-"""
+                if file_name:
+                    task_prompt += f"\n\nUse the data file: {file_name}"
                 
-                # Create fresh HTTP client for each task to avoid context accumulation
-                fresh_http_client = httpx.AsyncClient(timeout=timeout)
-                fresh_client = A2AClient(base_url=white_agent_url, http_client=fresh_http_client)
+                if concepts:
+                    concepts_str = ", ".join(concepts)
+                    task_prompt += f"\n\nRelevant concepts: {concepts_str}"
+                
+                if constraints:
+                    task_prompt += f"\n\nConstraints: {constraints}"
+                
+                if format_info:
+                    task_prompt += f"\n\nExpected output format: {format_info}"
+                
+                # Create ONE HTTP client for this task (completely isolated)
+                limits = httpx.Limits(max_keepalive_connections=0, max_connections=1)
+                http_client = httpx.AsyncClient(timeout=timeout, limits=limits)
+                client = A2AClient(base_url=white_agent_url, http_client=http_client)
                 
                 # Create task message for white agent
                 task_message = Message(
@@ -244,11 +268,17 @@ Here are the guidelines you must follow:
                     kind='message',
                     message_id=str(uuid.uuid4())
                 )
-                
-                print(f"   📤 Sending task to white agent: {question[:50]}{'...' if len(question) > 50 else ''}")
+                logger.info(f"   📤 Sending task to white agent: {question[:50]}{'...' if len(question) > 50 else ''}")
                 
                 # Send task to white agent
-                response = await fresh_client.send_message(task_message)
+                try:
+                    response = await client.send_message(task_message)
+                except httpx.ReadTimeout as e:
+                    logger.warning(f"   ⏰ Timeout sending message after {timeout.read}s")
+                    return "[Timeout during message sending]"
+                except Exception as e:
+                    logger.error(f"   ❌ Error sending message: {e}")
+                    return f"[Error sending message: {e}]"
                                 
                 if 'result' in response:
                     # Get task result
@@ -256,54 +286,57 @@ Here are the guidelines you must follow:
                     task_id = agent_task['id']
                                         
                     # Wait for completion
-                    max_wait_time = 600  # 10 minutes
+                    max_wait_time = 1800  # 30 minutes (total time for task completion)
                     poll_interval = 10   # Check every 10 seconds
                     elapsed_time = 0
                     
-                    print(f"   ⏳ Waiting for white agent to complete task...")
+                    logger.info(f"   ⏳ Waiting for white agent to complete task...")
                     
                     while elapsed_time < max_wait_time:
                         await asyncio.sleep(poll_interval)
                         elapsed_time += poll_interval
                         
                         try:
-                            task_response = await fresh_client.get_task(task_id)
+                            task_response = await client.get_task(task_id)
                             
                             if 'result' in task_response:
                                 final_task = task_response['result']
                                 task_status = final_task.get('status', {}).get('state', 'unknown')
                                 
-                                print(f"   📊 Task status: {task_status} (elapsed: {elapsed_time}s)")
+                                logger.info(f"   📊 Task status: {task_status} (elapsed: {elapsed_time}s)")
                                 
                                 if task_status == 'completed':
-                                    print(f"   ✅ White agent completed task after {elapsed_time}s")
+                                    logger.info(f"   ✅ White agent completed task after {elapsed_time}s")
                                     break
                                 elif task_status == 'failed':
-                                    print(f"   ❌ White agent task failed after {elapsed_time}s")
-                                    await fresh_http_client.aclose()
+                                    logger.warning(f"   ❌ White agent task failed after {elapsed_time}s")
                                     return f"[Task failed: {task_status}]"
                                 elif task_status in ['working', 'submitted']:
                                     continue  # Keep waiting
                                 else:
-                                    print(f"   ⚠️ Unknown task status: {task_status}")
+                                    logger.warning(f"   ⚠️ Unknown task status: {task_status}")
                                     break
                             else:
-                                print(f"   ❌ Failed to get white agent task status: {task_response}")
-                                await fresh_http_client.aclose()
+                                logger.error(f"   ❌ Failed to get white agent task status: {task_response}")
                                 return "[Failed to get task status]"
+                        except httpx.ReadTimeout as e:
+                            logger.warning(f"   ⏰ Status check timeout after {timeout.read}s (elapsed: {elapsed_time}s)")
+                            logger.info(f"   💭 White agent may be overloaded - continuing to wait...")
+                            continue  # Keep trying
                         except Exception as e:
-                            print(f"   ⚠️ Error checking white agent status: {e}")
-                            import traceback
-                            print(f"   📍 Status check traceback: {traceback.format_exc()}")
+                            logger.warning(f"   ⚠️ Error checking white agent status: {e}")
                             continue
                     
                     if elapsed_time >= max_wait_time:
-                        print(f"   ⏰ White agent task timed out after {max_wait_time}s")
-                        await fresh_http_client.aclose()
+                        logger.warning(f"   ⏰ White agent task timed out after {max_wait_time}s")
                         return "[Task timed out]"
                     
                     # Get final task result and extract answer
-                    task_response = await fresh_client.get_task(task_id)
+                    try:
+                        task_response = await client.get_task(task_id)
+                    except httpx.ReadTimeout as e:
+                        logger.warning(f"   ⏰ Final result timeout after {timeout.read}s")
+                        return "[Final result retrieval timeout]"
                                         
                     if 'result' in task_response:
                         final_task = task_response['result']
@@ -312,44 +345,43 @@ Here are the guidelines you must follow:
                         agent_answer = self._extract_agent_answer(final_task)
                         
                         if agent_answer:
-                            print(f"   💬 White agent answered: '{agent_answer[:100]}{'...' if len(agent_answer) > 100 else ''}'")
-                            await fresh_http_client.aclose()
+                            logger.info(f"   💬 White agent answered: '{agent_answer[:100]}{'...' if len(agent_answer) > 100 else ''}'")
                             return agent_answer
                         else:
-                            print(f"   ⚠️ Could not extract answer from white agent response")
-                            print(f"   🔍 Final task structure: {list(final_task.keys()) if isinstance(final_task, dict) else type(final_task)}")
-                            await fresh_http_client.aclose()
+                            logger.warning(f"   ⚠️ Could not extract answer from white agent response")
+                            logger.warning(f"   🔍 Final task structure: {list(final_task.keys()) if isinstance(final_task, dict) else type(final_task)}")
                             return "[No answer extracted]"
                     else:
                         error = task_response.get('error', 'Unknown error')
-                        print(f"   ❌ White agent task failed: {error}")
-                        await fresh_http_client.aclose()
+                        logger.error(f"   ❌ White agent task failed: {error}")
                         return f"[Task failed: {error}]"
                 else:
                     error = response.get('error', 'Unknown error')
-                    print(f"   ❌ Failed to send message to white agent: {error}")
-                    print(f"   🔍 Full response: {response}")
-                    await fresh_http_client.aclose()
+                    logger.error(f"   ❌ Failed to send message to white agent: {error}")
+                    logger.error(f"   🔍 Full response: {response}")
                     return f"[Message send failed: {error}]"
                         
             except Exception as e:
-                print(f"   ❌ Exception during white agent evaluation: {e}")
-                print(f"   🔍 Exception type: {type(e).__name__}")
+                logger.error(f"   ❌ Exception during white agent evaluation: {e}")
+                logger.error(f"   🔍 Exception type: {type(e).__name__}")
                 import traceback
-                print(f"   📍 Full traceback: {traceback.format_exc()}")
-                # Clean up if we have a fresh_http_client
-                try:
-                    await fresh_http_client.aclose()
-                except:
-                    pass
+                logger.error(f"   📍 Full traceback: {traceback.format_exc()}")
                 return f"[Error: {str(e)}]"
+            finally:
+                # Ensure the client is always closed
+                if http_client:
+                    await http_client.aclose()
+                    logger.info("   🔒 HTTP client closed.")
         
-        # Create pydantic eval cases from DABSTEP tasks
+        # Create pydantic eval cases from DABench tasks
         cases = []
         for i, task in enumerate(tasks):
             task_input_data = {
                 'question': task['question'],
-                'guidelines': task['guidelines'],
+                'constraints': task.get('constraints', ''),
+                'format': task.get('format', ''),
+                'file_name': task.get('file_name', ''),
+                'concepts': task.get('concepts', []),
             }
             
             case = Case(
@@ -385,7 +417,7 @@ Here are the guidelines you must follow:
             evaluators=evaluators
         )
         
-        print(f"🔍 Running Pydantic Eval with {len(cases)} cases and {len(evaluators)} evaluators...")
+        logger.info(f"🔍 Running Pydantic Eval with {len(cases)} cases and {len(evaluators)} evaluators...")
         
         # Run evaluation
         start_time = time.time()
@@ -393,16 +425,19 @@ Here are the guidelines you must follow:
             report = await dataset.evaluate(evaluate_white_agent)
             evaluation_time = time.time() - start_time
             
-            print(f"✅ Pydantic Eval completed in {evaluation_time:.2f} seconds")
+            logger.info(f"✅ Pydantic Eval completed in {evaluation_time:.2f} seconds")
             report.print(include_reasons=True, include_output=True, include_expected_output=True)
+            
+            # Save report to results folder
+            await self._save_evaluation_report(report, evaluation_time, len(cases))
             
             # Return the report object directly
             return report
             
         except Exception as e:
-            print(f"❌ Pydantic Eval failed: {e}")
+            logger.error(f"❌ Pydantic Eval failed: {e}")
             import traceback
-            print(f"📍 Traceback: {traceback.format_exc()}")
+            logger.error(f"📍 Traceback: {traceback.format_exc()}")
             
             return {
                 'success': False,
@@ -410,6 +445,140 @@ Here are the guidelines you must follow:
                 'evaluation_time': time.time() - start_time,
                 'total_cases': len(cases)
             }
+    
+    async def _save_evaluation_report(self, report, evaluation_time: float, total_cases: int) -> None:
+        """Save the pydantic evaluation report to a results folder."""
+        try:
+            import os
+            from datetime import datetime
+            
+            # Create results directory if it doesn't exist
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+            results_dir = os.path.join(project_root, 'results')
+            os.makedirs(results_dir, exist_ok=True)
+            
+            # Generate timestamp for filename
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            
+            # Create filename with timestamp and case count
+            filename = f"pydantic_eval_report_{timestamp}_{total_cases}cases.json"
+            filepath = os.path.join(results_dir, filename)
+            
+            # Extract structured data from EvaluationReport using the proper API
+            if hasattr(report, 'cases') and hasattr(report, 'failures'):
+                # This is a proper EvaluationReport object
+                report_data = {
+                    'name': getattr(report, 'name', 'Unnamed Evaluation'),
+                    'cases': [],
+                    'failures': [],
+                    'experiment_metadata': getattr(report, 'experiment_metadata', None),
+                }
+                
+                # Process successful cases
+                for case in report.cases:
+                    case_data = {
+                        'name': case.name,
+                        'inputs': case.inputs,
+                        'expected_output': case.expected_output,
+                        'output': case.output,
+                        'metadata': case.metadata,
+                    }
+                    
+                    # Add evaluator scores/results if available
+                    if hasattr(case, 'scores'):
+                        case_data['scores'] = case.scores
+                    if hasattr(case, 'labels'):
+                        case_data['labels'] = case.labels
+                    if hasattr(case, 'metrics'):
+                        case_data['metrics'] = case.metrics
+                        
+                    report_data['cases'].append(case_data)
+                
+                # Process failures
+                for failure in report.failures:
+                    failure_data = {
+                        'name': failure.name,
+                        'inputs': failure.inputs,
+                        'expected_output': failure.expected_output,
+                        'error_message': failure.error_message,
+                        'error_stacktrace': failure.error_stacktrace,
+                        'metadata': failure.metadata,
+                    }
+                    report_data['failures'].append(failure_data)
+                
+                # Calculate summary statistics
+                total_cases_processed = len(report.cases) + len(report.failures)
+                success_count = len(report.cases)
+                success_rate = success_count / total_cases_processed if total_cases_processed > 0 else 0
+                
+                report_data.update({
+                    'total_cases': total_cases_processed,
+                    'successful_cases': success_count,
+                    'failed_cases': len(report.failures),
+                    'success_rate': success_rate,
+                })
+                
+                # Add a nicely formatted table representation
+                if hasattr(report, 'render'):
+                    try:
+                        # Use the render method for a clean, readable text table
+                        formatted_table = report.render(
+                            include_output=True,
+                            include_expected_output=True,
+                            include_reasons=True
+                        )
+                        # Split the table into lines for better JSON readability
+                        report_data['formatted_summary'] = formatted_table.split('\n')
+                    except Exception:
+                        # Fallback if render fails
+                        report_data['formatted_summary'] = str(report).split('\n')
+                else:
+                    report_data['formatted_summary'] = str(report).split('\n')
+                
+            elif hasattr(report, 'model_dump'):
+                # Pydantic v2 style serialization
+                report_data = report.model_dump()
+                success_rate = getattr(report, 'success_rate', None)
+            elif hasattr(report, 'dict'):
+                # Pydantic v1 style serialization
+                report_data = report.dict()
+                success_rate = getattr(report, 'success_rate', None)
+            elif isinstance(report, dict):
+                # Already a dictionary (error case)
+                report_data = report
+                success_rate = report.get('success_rate')
+            else:
+                # Fallback - convert to string
+                report_data = {
+                    'report_text': str(report),
+                    'type': str(type(report).__name__)
+                }
+                success_rate = None
+            
+            # Add our custom metadata
+            evaluation_metadata = {
+                "evaluation_time_seconds": evaluation_time,
+                "total_cases": total_cases,
+                "timestamp": timestamp,
+                "success_rate": report_data.get('success_rate', success_rate),
+                "generated_by": "Green Agent - Pydantic Eval"
+            }
+            
+            # Combine metadata with report
+            full_report = {
+                "metadata": evaluation_metadata,
+                "report": report_data
+            }
+            
+            # Save to JSON file with proper serialization
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(full_report, f, indent=2, ensure_ascii=False, default=str)
+            
+            logger.info(f"📄 Evaluation report saved to: {filepath}")
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to save evaluation report: {e}")
+            # Don't raise the exception - just log it, so the evaluation can continue
     
     def _extract_agent_answer(self, task_result: Dict[str, Any]) -> Optional[str]:
         """Extract agent's answer from task result."""
@@ -464,15 +633,43 @@ Here are the guidelines you must follow:
         """Create artifacts with Pydantic Eval results."""
         artifacts = []
         
-        # Convert report to serializable format
-        if hasattr(report, 'model_dump'):
+        # Convert EvaluationReport to serializable format using proper API
+        if hasattr(report, 'cases') and hasattr(report, 'failures'):
+            # This is a proper EvaluationReport object - extract using documented API
+            report_data = {
+                'name': getattr(report, 'name', 'Evaluation Report'),
+                'total_cases': len(getattr(report, 'cases', [])) + len(getattr(report, 'failures', [])),
+                'successful_cases': len(getattr(report, 'cases', [])),
+                'failed_cases': len(getattr(report, 'failures', [])),
+                'cases': [
+                    {
+                        'name': case.name,
+                        'inputs': case.inputs,
+                        'expected_output': case.expected_output,
+                        'output': case.output,
+                        'scores': getattr(case, 'scores', {}),
+                        'labels': getattr(case, 'labels', {}),
+                        'metrics': getattr(case, 'metrics', {}),
+                    }
+                    for case in getattr(report, 'cases', [])
+                ],
+                'failures': [
+                    {
+                        'name': failure.name,
+                        'error_message': failure.error_message,
+                        'inputs': failure.inputs,
+                    }
+                    for failure in getattr(report, 'failures', [])
+                ]
+            }
+        elif hasattr(report, 'model_dump'):
             # Pydantic v2 style serialization
             report_data = report.model_dump()
         elif hasattr(report, 'dict'):
             # Pydantic v1 style serialization
             report_data = report.dict()
         elif isinstance(report, dict):
-            # Already a dictionary
+            # Already a dictionary (error case)
             report_data = report
         else:
             # Fallback - convert to string then wrap in dict
@@ -498,8 +695,8 @@ Here are the guidelines you must follow:
         return ' '.join(text_parts)
 
 
-def create_dabstep_green_agent() -> FastA2A:
-    """Create the DABSTEP green agent with Pydantic Eval."""
+def create_green_agent() -> FastA2A:
+    """Create the green agent with Pydantic Eval."""
     
     # Initialize storage and broker
     storage = InMemoryStorage[Context]()
@@ -508,11 +705,11 @@ def create_dabstep_green_agent() -> FastA2A:
     # Define skills
     evaluation_skill = Skill(
         id="pydantic-eval-assessment",
-        name="Pydantic Eval DABSTEP Assessment",
-        description="Evaluates A2A agents using DABSTEP benchmark tasks with Pydantic Eval framework and LLM as judge",
-        tags=["evaluation", "pydantic-eval", "llm-judge", "benchmark", "scoring", "dabstep"],
+        name="Pydantic Eval Assessment",
+        description="Evaluates A2A agents using benchmark tasks with Pydantic Eval framework and LLM as judge",
+        tags=["evaluation", "pydantic-eval", "llm-judge", "benchmark", "scoring"],
         examples=[
-            "Evaluate an A2A agent on DABSTEP tasks using Pydantic Eval",
+            "Evaluate an A2A agent on benchmark tasks using Pydantic Eval",
             "Run benchmark assessment with LLM as judge and return structured report"
         ],
         input_modes=["application/json"],
@@ -527,21 +724,31 @@ def create_dabstep_green_agent() -> FastA2A:
     )
     
     # Create worker
-    worker = DABStepGreenWorker(broker=broker, storage=storage)
+    worker = GreenWorker(broker=broker, storage=storage)
     
-    # Add lifespan to start worker
+    # Add lifespan to start worker (same pattern as white agent)
     @asynccontextmanager
     async def lifespan(app):
-        async with app.task_manager:
-            async with worker.run():
-                yield
+        logger.info("🚀 Starting Green Agent worker...")
+        try:
+            async with app.task_manager:
+                async with worker.run():
+                    logger.info("✅ Green Agent worker started successfully")
+                    yield
+        except Exception as e:
+            logger.error(f"❌ Failed to start Green Agent worker: {e}")
+            import traceback
+            logger.error(f"📍 Traceback: {traceback.format_exc()}")
+            raise
+        finally:
+            logger.info("🛑 Green Agent worker stopped")
     
     # Create app with lifespan
     app = FastA2A(
         storage=storage,
         broker=broker,
-        name="DABSTEP Green Agent (Pydantic Eval)",
-        description="A2A-compatible green agent that evaluates other agents using DABSTEP benchmark with Pydantic Eval framework",
+        name="Green Agent (Pydantic Eval)",
+        description="A2A-compatible green agent that evaluates other agents using benchmark tasks with Pydantic Eval framework",
         url="http://localhost:8000",
         version="1.0.0",
         provider=provider,
@@ -556,13 +763,13 @@ def main():
     """Main entry point for the green agent."""
     import uvicorn
     
-    print("🟢 Starting DABSTEP Green Agent with Pydantic Eval...")
-    print("📋 Agent Card: http://localhost:8000/.well-known/agent-card.json")
-    print("🔗 A2A Endpoint: http://localhost:8000/")
-    print("🎯 Evaluation Framework: Pydantic Eval with LLM as Judge")
+    logger.info("🟢 Starting Green Agent with Pydantic Eval...")
+    logger.info("📋 Agent Card: http://localhost:8000/.well-known/agent-card.json")
+    logger.info("🔗 A2A Endpoint: http://localhost:8000/")
+    logger.info("🎯 Evaluation Framework: Pydantic Eval with LLM as Judge")
     
     uvicorn.run(
-        "agent:create_dabstep_green_agent",
+        "agent:create_green_agent",
         factory=True,
         host="0.0.0.0",
         port=8000,

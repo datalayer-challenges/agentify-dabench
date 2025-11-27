@@ -1,5 +1,5 @@
 """
-DABSTEP White Agent - Fully Autonomous Agent with Pydantic AI MCP tool capabilities.
+White Agent - Fully Autonomous Agent with Pydantic AI MCP tool capabilities.
 
 This agent:
 1. Receives evaluation tasks from the green agent
@@ -21,76 +21,60 @@ from fasta2a import FastA2A, Skill, Worker
 from fasta2a.broker import InMemoryBroker
 from fasta2a.storage import InMemoryStorage
 from fasta2a.schema import Artifact, Message, TaskIdParams, TaskSendParams, TextPart, DataPart, AgentProvider
-import logging
-
-logging.getLogger("pydantic_ai").setLevel(logging.DEBUG)
 
 # Pydantic AI imports for MCP integration
-try:
-    from pydantic_ai import Agent
-    from pydantic_ai.models import KnownModelName
-    from pydantic_ai.models.openai import OpenAIModel
-    from pydantic_ai.mcp import MCPServerStreamableHTTP
-    import litellm
-except ImportError as e:
-    print(f"❌ Required packages not installed: {e}")
-    print("Please install: pip install pydantic-ai litellm")
-    sys.exit(1)
+from pydantic_ai import Agent
+from pydantic_ai.mcp import MCPServerStreamableHTTP
 
-# Load environment variables from .env file
-try:
-    from dotenv import load_dotenv
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-    dotenv_path = os.path.join(project_root, '.env')
-    load_dotenv(dotenv_path)
-    print(f"🔧 White Agent loaded environment variables from {dotenv_path}")
-except ImportError:
-    print("⚠️  python-dotenv not installed, skipping .env file loading")
-except Exception as e:
-    print(f"⚠️  Failed to load .env file: {e}")
+from dotenv import load_dotenv
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+dotenv_path = os.path.join(project_root, '.env')
+load_dotenv(dotenv_path)
+print(f"🔧 White Agent loaded environment variables from {dotenv_path}")
 
-# Set up logging to reduce noise
-litellm.set_verbose = False
 
 # Import shared utilities
 try:
-    from ..shared_utils import setup_llm_client, get_pydantic_ai_model
+    from ..shared_utils import setup_llm_client, get_pydantic_ai_model, setup_logger
 except ImportError:
     # Fallback for when running as script
     sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-    from shared_utils import setup_llm_client, get_pydantic_ai_model
+    from shared_utils import setup_llm_client, get_pydantic_ai_model, setup_logger
+
+# Setup logger
+logger = setup_logger("white_agent")
 
 # Context type for the white agent
 Context = List[Message]
 
 
-class DABStepWhiteWorker(Worker[Context]):
+class WhiteWorker(Worker[Context]):
     """White agent worker - fully autonomous with AI-driven decision making using Pydantic AI MCP."""
     
     def __init__(self, broker, storage, jupyter_token=None, base_url="http://localhost:8888"):
-        print("🏗️  Initializing DABStepWhiteWorker with Pydantic AI MCP")
+        logger.info("🏗️  Initializing WhiteWorker with Pydantic AI MCP")
         super().__init__(storage=storage, broker=broker)
         self.jupyter_token = jupyter_token or os.getenv("JUPYTER_TOKEN")
         self.base_url = base_url
         self.mcp_url = f"{base_url}/mcp"
         self.agent = None
         self._agent_setup_complete = False
-        print("✅ DABStepWhiteWorker initialized")
+        logger.info("✅ WhiteWorker initialized")
     
     async def _setup_agent(self):
         """Setup the Pydantic AI agent with MCP tools in async context."""
         try:
-            print(f"🔧 Setting up Pydantic AI MCP client connecting to: {self.mcp_url}")
+            logger.info(f"🔧 Setting up Pydantic AI MCP client connecting to: {self.mcp_url}")
             
             # Create MCP server connection using streamable HTTP
             headers = {}
             if self.jupyter_token:
                 headers = {"Authorization": f"token {self.jupyter_token}"}
-                print(f"🔑 Using authorization header with token: {self.jupyter_token[:8]}...")
+                logger.info(f"🔑 Using authorization header with token: {self.jupyter_token[:8]}...")
             else:
-                print("⚠️ No Jupyter token found, connecting without authentication")
+                logger.warning("⚠️ No Jupyter token found, connecting without authentication")
             
-            print(f"🌐 Creating MCP server connection to: {self.mcp_url}")
+            logger.info(f"🌐 Creating MCP server connection to: {self.mcp_url}")
             
             # Create MCP server connection
             mcp_server = MCPServerStreamableHTTP(
@@ -98,53 +82,46 @@ class DABStepWhiteWorker(Worker[Context]):
                 headers=headers
             )
             
-            print(f"✅ MCP server connection created")
+            logger.info(f"✅ MCP server connection created")
             
             # Get the correct Pydantic AI model configuration
-            print(f"🤖 Setting up Pydantic AI model...")
+            logger.info(f"🤖 Setting up Pydantic AI model...")
             pydantic_model = get_pydantic_ai_model()
-            print(f"✅ Pydantic AI model setup complete with model: {pydantic_model}")
+            logger.info(f"✅ Pydantic AI model setup complete with model: {pydantic_model}")
             
             # Create Pydantic AI agent with MCP tools
-            print(f"🧠 Creating Pydantic AI agent with model: {pydantic_model}")
+            logger.info(f"🧠 Creating Pydantic AI agent with model: {pydantic_model}")
             self.agent = Agent(
                 model=pydantic_model,
                 toolsets=[mcp_server],
-                system_prompt="""You are an AI data analyst with access to MCP tools for data analysis.
-
-Available data files in data directory:
-- payments.csv (transaction data)
-- acquirer_countries.csv (country data)  
-- merchant_category_codes.csv (merchant codes)
-- merchant_data.json (merchant information)
-- fees.json (fee information)
+                system_prompt="""You are an AI data analyst with access to MCP tools for data analysis. All your data files are in the ./data directory, do not bother checking the filesystem.
 
 Your workflow should be:
-1. List files using list_files to see available datasets
+1. Connect to notebook.ipynb to perform the following steps
 2. Load and examine relevant datasets using execute_code
 3. Perform analysis step by step with execute_code
 4. Provide a concise final answer based on your analysis
 """)
-            print("✅ Pydantic AI MCP agent setup complete")
+            logger.info("✅ Pydantic AI MCP agent setup complete")
             
         except Exception as e:
-            print(f"❌ Failed to setup Pydantic AI MCP agent: {e}")
-            print(f"🔍 Error type: {type(e)}")
+            logger.error(f"❌ Failed to setup Pydantic AI MCP agent: {e}")
+            logger.error(f"🔍 Error type: {type(e)}")
             import traceback
-            traceback.print_exc()
+            logger.error(traceback.format_exc())
             self.agent = None
     
     async def run_task(self, params: TaskSendParams) -> None:
         """Process a task and provide a response."""
-        print(f"⚪ White Agent run_task called with params: {params}")
+        logger.info(f"⚪ White Agent run_task called with params: {params}")
         
         task = await self.storage.load_task(params['id'])
         if task is None:
-            print(f"❌ Task {params['id']} not found")
+            logger.error(f"❌ Task {params['id']} not found")
             await self.storage.update_task(params['id'], state='failed')
             return
         
-        print(f"✅ Task loaded: {task}")
+        logger.info(f"✅ Task loaded: {task}")
         await self.storage.update_task(task['id'], state='working')
         
         try:
@@ -154,11 +131,11 @@ Your workflow should be:
             
             # Extract question from message
             message = params['message']
-            print(f"📨 Received message: {message}")
+            logger.info(f"📨 Received message: {message}")
         
             # Setup agent if not already done (async context required)
             if not self._agent_setup_complete:
-                print("🔧 Setting up agent in async context...")
+                logger.info("🔧 Setting up agent in async context...")
                 await self._setup_agent()
                 self._agent_setup_complete = True
             
@@ -166,25 +143,25 @@ Your workflow should be:
             if not self.agent:
                 raise Exception("Pydantic AI agent not initialized")
                 
-            print(f"🤖 Processing with Pydantic AI agent...")
-            print(f"🚀 Starting agent execution...")
+            logger.info(f"🤖 Processing with Pydantic AI agent...")
+            logger.info(f"🚀 Starting agent execution...")
             
             try:
                 # Execute the agent directly - same as test_simple_agent.py
-                print(f"🤖 Executing agent directly...")
+                logger.info(f"🤖 Executing agent directly...")
                 question = self._extract_text_from_parts(message['parts'])
                 result = await self.agent.run(question)
                 
-                print(f"✅ Agent execution completed!")
+                logger.info(f"✅ Agent execution completed!")
                 answer = str(result.output)
                 
-                print(f"💡 Generated answer: {answer}")
+                logger.info(f"💡 Generated answer: {answer}")
                 
             except Exception as e:
-                print(f"❌ Pydantic AI execution failed: {e}")
-                print(f"🔍 Error type: {type(e)}")
+                logger.error(f"❌ Pydantic AI execution failed: {e}")
+                logger.error(f"🔍 Error type: {type(e)}")
                 import traceback
-                traceback.print_exc()
+                logger.error(traceback.format_exc())
                 answer = f"Error during AI processing: {str(e)}"
             
             # Create response message
@@ -200,12 +177,12 @@ Your workflow should be:
                 new_messages=[response_message],
                 new_artifacts=artifacts
             )
-            print(f"✅ Task {task['id']} completed successfully")
+            logger.info(f"✅ Task {task['id']} completed successfully")
             
         except Exception as e:
-            print(f"❌ Task processing failed: {e}")
+            logger.error(f"❌ Task processing failed: {e}")
             import traceback
-            traceback.print_exc()
+            logger.error(traceback.format_exc())
             
             # Handle errors
             error_message = Message(
@@ -278,8 +255,8 @@ Your workflow should be:
         return ' '.join(text_parts)
 
 
-def create_dabstep_white_agent() -> FastA2A:
-    """Create the DABSTEP white agent with MCP tool capabilities."""
+def create_white_agent() -> FastA2A:
+    """Create the white agent with MCP tool capabilities."""
     
     # Initialize storage and broker
     storage = InMemoryStorage[Context]()
@@ -318,15 +295,15 @@ def create_dabstep_white_agent() -> FastA2A:
     
     # Agent provider
     provider = AgentProvider(
-        organization=os.getenv("AGENT_ORGANIZATION", "DABSTEP"),
+        organization=os.getenv("AGENT_ORGANIZATION", "DataAnalysis"),
         url=os.getenv("AGENT_PROVIDER_URL", "http://localhost:8001")
     )
     
     # Create worker with Pydantic AI MCP
     jupyter_token = os.getenv("JUPYTER_TOKEN")
-    print(f"🔑 White Agent token: {jupyter_token[:8] + '...' if jupyter_token else 'None'}")
+    logger.info(f"🔑 White Agent token: {jupyter_token[:8] + '...' if jupyter_token else 'None'}")
     
-    worker = DABStepWhiteWorker(
+    worker = WhiteWorker(
         broker=broker, 
         storage=storage, 
         jupyter_token=jupyter_token,
@@ -344,7 +321,7 @@ def create_dabstep_white_agent() -> FastA2A:
     app = FastA2A(
         storage=storage,
         broker=broker,
-        name="DABSTEP White Agent - Autonomous",
+        name="White Agent - Autonomous",
         description="Fully autonomous A2A-compatible agent with AI-driven decision making and MCP tool capabilities",
         url="http://localhost:8001",
         version="2.0.0",
@@ -360,14 +337,14 @@ def main():
     """Main entry point for the autonomous white agent."""
     import uvicorn
     
-    print("⚪ Starting DABSTEP White Agent - Fully Autonomous")
-    print("🤖 AI-Driven: Pure autonomous decision making")
-    print("🛠️  MCP Tools: Dynamic tool discovery and usage")
-    print("📋 Agent Card: http://localhost:8001/.well-known/agent-card.json")
-    print("🔗 A2A Endpoint: http://localhost:8001/")
+    logger.info("⚪ Starting White Agent - Fully Autonomous")
+    logger.info("🤖 AI-Driven: Pure autonomous decision making")
+    logger.info("🛠️  MCP Tools: Dynamic tool discovery and usage")
+    logger.info("📋 Agent Card: http://localhost:8001/.well-known/agent-card.json")
+    logger.info("🔗 A2A Endpoint: http://localhost:8001/")
     
     uvicorn.run(
-        "agent:create_dabstep_white_agent",
+        "agent:create_white_agent",
         factory=True,
         host="0.0.0.0",
         port=8001,

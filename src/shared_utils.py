@@ -1,9 +1,49 @@
 """
-Shared utilities for DABSTEP agents.
+Shared utilities for agents.
 """
 
 import os
+from openai import OpenAI
+from pydantic_ai_plugins.openai_schema import OpenAISchema
 
+# --- Logging ---
+
+import logging
+import sys
+from logging.handlers import TimedRotatingFileHandler
+
+def setup_logger(name: str, log_dir: str = "logs"):
+    """Sets up a logger that writes to a file and streams to the console."""
+    
+    # Create log directory if it doesn't exist
+    project_root = os.path.dirname(os.path.dirname(__file__))
+    log_path = os.path.join(project_root, log_dir)
+    if not os.path.exists(log_path):
+        os.makedirs(log_path)
+        
+    log_file = os.path.join(log_path, f"{name}.log")
+    
+    # Get logger and prevent duplicate handlers
+    logger = logging.getLogger(name)
+    if logger.hasHandlers():
+        return logger  # Already configured
+
+    logger.setLevel(logging.INFO)
+    
+    # Create formatter
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    
+    # File handler
+    file_handler = TimedRotatingFileHandler(log_file, when="midnight", interval=1, backupCount=7)
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+    
+    # Console handler
+    stream_handler = logging.StreamHandler(sys.stdout)
+    stream_handler.setFormatter(formatter)
+    logger.addHandler(stream_handler)
+    
+    return logger
 
 def setup_llm_client():
     """
@@ -57,8 +97,7 @@ def setup_llm_client():
         print(f"⚠️  LLM setup error: {e}")
         return None, model_name
 
-
-def get_pydantic_ai_model():
+def get_pydantic_ai_model() -> OpenAISchema:
     """
     Get the correct model name format for Pydantic AI based on environment configuration.
     Returns the model name in the format expected by Pydantic AI.

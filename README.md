@@ -1,23 +1,23 @@
-# DABSTEP AgentBeats Implementation
+# DABench AgentBeats Implementation
 
-A complete A2A (Agent-to-Agent) compatible implementation of the DABSTEP benchmark, following the AgentBeats methodology with Green Agent (evaluator) and White Agent (test subject) architecture.
+A complete A2A (Agent-to-Agent) compatible implementation of the DABench benchmark, following the AgentBeats methodology with Green Agent (evaluator) and White Agent (test subject) architecture.
 
 ## Overview
 
 ![](image.png)
 
-This project implements the [DABSTEP](https://huggingface.co/spaces/adyen/DABstep) benchmark as an A2A-compatible evaluation system where:
+This project implements the [DABench](https://github.com/InfiAgent/InfiAgent/tree/main/examples/DA-Agent/data) benchmark as an A2A-compatible evaluation system where:
 
-- **Green Agent** (Evaluator): Manages DABSTEP assessments and evaluates other agents
+- **Green Agent** (Evaluator): Manages DABench assessments and evaluates other agents
 - **White Agent** (Test Subject): The agent being evaluated, with MCP tool capabilities
 - **Launcher**: One-command execution script for easy setup and evaluation
 
-The Data Agent Benchmark for Multi-step Reasoning (DABStep) is looking to measure and push the state-of-the-art in Data Analysis by LLMs.
+The Data Agent Benchmark (DABench) is designed to measure and push the state-of-the-art in Data Analysis by LLMs.
 
 ## Features
 
 - ✅ **A2A Protocol Compatible**: Full compatibility with Agent-to-Agent communication standard
-- ✅ **DABSTEP Scoring**: Original DABSTEP benchmark scoring methodology
+- ✅ **DABench Scoring**: DABench benchmark scoring methodology with Pydantic Eval
 - ✅ **AgentBeats Architecture**: Proper green/white agent separation
 - ✅ **LLM Provider Integration**: 100+ LLM providers via LiteLLM (OpenAI, Anthropic, Google, Cohere, Ollama, etc.)
 - ✅ **MCP Tools Integration**: White agent supports jupyter-mcp-server tools
@@ -125,7 +125,7 @@ headers = {"Authorization": f"Bearer {self.jupyter_token}"}
 
 ### Data Context Files
 
-The White Agent has access to DABSTEP data files in `data/`:
+The White Agent has access to DABench data files in `agent-workings/data/`:
 
 - **`payments.csv`** - Transaction data for financial analysis
 - **`acquirer_countries.csv`** - Country mapping data
