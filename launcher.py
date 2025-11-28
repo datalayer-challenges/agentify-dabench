@@ -46,7 +46,7 @@ except ImportError:
 class Launcher:
     """Manages launching and coordinating agents."""
     
-    def __init__(self):
+    def __init__(self, log_dir: Path):
         self.green_process: Optional[subprocess.Popen] = None
         self.white_process: Optional[subprocess.Popen] = None
         self.jupyter_process: Optional[subprocess.Popen] = None
@@ -54,13 +54,9 @@ class Launcher:
         self.white_port = 8001
         self.jupyter_port = 8888  # Standard Jupyter port
         self.jupyter_token: Optional[str] = None
-        
-        # Setup logging
-        self.log_dir = project_root / "logs"
-        self.log_dir.mkdir(exist_ok=True)
+        self.log_dir = log_dir
         self.green_log_handle: Optional[Any] = None
         self.white_log_handle: Optional[Any] = None
-        self.jupyter_log_handle: Optional[Any] = None
     
     def start_green_agent(self) -> bool:
         """Start the green agent (evaluator)."""
@@ -72,15 +68,17 @@ class Launcher:
                 print(f"❌ Green agent directory not found: {green_dir}")
                 return False
             
-            # Setup logging
+            # Log to a file inside the timestamped log directory
             green_log_path = self.log_dir / "green_agent.log"
             print(f"📝 Green agent logs will be written to: {green_log_path}")
             self.green_log_handle = open(green_log_path, "w")
-            
-            # Start agent
-            self.green_process = subprocess.Popen([
-                sys.executable, "agent.py"
-            ], cwd=green_dir, stdout=self.green_log_handle, stderr=subprocess.STDOUT)
+
+            self.green_process = subprocess.Popen(
+                [sys.executable, "agent.py"],
+                cwd=green_dir,
+                stdout=self.green_log_handle,
+                stderr=self.green_log_handle
+            )
             
             # Wait for startup
             await_time = 5
@@ -110,15 +108,17 @@ class Launcher:
                 print(f"❌ White agent directory not found: {white_dir}")
                 return False
             
-            # Setup logging
+            # Log to a file inside the timestamped log directory
             white_log_path = self.log_dir / "white_agent.log"
             print(f"📝 White agent logs will be written to: {white_log_path}")
             self.white_log_handle = open(white_log_path, "w")
-            
-            # Start agent
-            self.white_process = subprocess.Popen([
-                sys.executable, "agent.py"
-            ], cwd=white_dir, stdout=self.white_log_handle, stderr=subprocess.STDOUT)
+
+            self.white_process = subprocess.Popen(
+                [sys.executable, "agent.py"],
+                cwd=white_dir,
+                stdout=self.white_log_handle,
+                stderr=self.white_log_handle
+            )
             
             # Wait for startup
             await_time = 5
@@ -150,10 +150,10 @@ class Launcher:
             
             print(f"🔑 Using Jupyter token: {jupyter_token[:8]}...")
             
-            # Setup logging
+            # Log to a file inside the timestamped log directory
             jupyter_log_path = self.log_dir / "jupyter_mcp.log"
             print(f"📝 JupyterLab logs will be written to: {jupyter_log_path}")
-            self.jupyter_log_handle = open(jupyter_log_path, "w")
+            jupyter_log_handle = open(jupyter_log_path, "w")
             
             # Start JupyterLab with token authentication (no login required)
             self.jupyter_process = subprocess.Popen([
@@ -161,7 +161,7 @@ class Launcher:
                 f"--port={self.jupyter_port}",
                 "--no-browser",
                 f"--IdentityProvider.token={jupyter_token}",
-            ], cwd=f"{project_root}/agent-workings", stdout=self.jupyter_log_handle, stderr=subprocess.STDOUT)
+            ], cwd=f"{project_root}/agent-workings", stdout=jupyter_log_handle, stderr=subprocess.STDOUT)
             
             # Wait for startup
             await_time = 8
@@ -268,14 +268,12 @@ class Launcher:
                 self.white_process.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 self.white_process.kill()
-        
+
         # Close log file handles
         if self.green_log_handle:
             self.green_log_handle.close()
         if self.white_log_handle:
             self.white_log_handle.close()
-        if self.jupyter_log_handle:
-            self.jupyter_log_handle.close()
     
     async def check_agent_health(self, url: str, name: str) -> bool:
         """Check if agent is healthy and responding."""
@@ -585,7 +583,15 @@ Examples:
     
     args = parser.parse_args()
     
-    launcher = Launcher()
+    # --- Setup Logging Directory ---
+    from datetime import datetime
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_dir = project_root / "logs" / f"run_{timestamp}"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    os.environ["AGENT_LOG_DIR"] = str(log_dir)
+    print(f"🪵  Logging for this run will be stored in: {log_dir}")
+    
+    launcher = Launcher(log_dir=log_dir)
     
     def signal_handler(signum, frame):
         print("\n🛑 Shutting down...")

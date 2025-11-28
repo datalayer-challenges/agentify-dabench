@@ -59,7 +59,7 @@ class GreenWorker(Worker[Context]):
     
     def __init__(self, broker, storage):
         super().__init__(storage=storage, broker=broker)
-        self.pydantic_ai_model = get_pydantic_ai_model()
+        self.pydantic_ai_model = get_pydantic_ai_model('green')
     
     async def run_task(self, params: TaskSendParams) -> None:
         """Execute an evaluation task using Pydantic Eval."""
@@ -222,17 +222,16 @@ Example: "Please evaluate the agent at http://localhost:8001 using these tasks: 
         )
         
         # Create evaluation function that calls the white agent
-        async def evaluate_white_agent(task_input: str) -> str:
+        async def evaluate_white_agent(task_input: dict) -> str:
             """Function that sends tasks to the white agent and returns the response."""
             http_client = None  # Initialize to None
             try:
-                # Parse task input to get question and DABench data
-                task_data = json.loads(task_input)
+                # The task_input is already a dictionary, no need to load it from a string.
+                task_data = task_input
                 question = task_data['question']
-                constraints = task_data.get('constraints', '')
-                format_info = task_data.get('format', '')
-                file_name = task_data.get('file_name', '')
-                concepts = task_data.get('concepts', [])
+                constraints = task_data['constraints']
+                format_info = task_data['format']
+                file_name = task_data['file_name']
                 
                 # Create task prompt for white agent using DABench format
                 task_prompt = f"""You are an expert data analyst and you will answer the question using the tools at your disposal.
@@ -240,19 +239,10 @@ Example: "Please evaluate the agent at http://localhost:8001 using these tasks: 
 Here is the question you need to answer:
 {question}"""
 
-                if file_name:
-                    task_prompt += f"\n\nUse the data file: {file_name}"
-                
-                if concepts:
-                    concepts_str = ", ".join(concepts)
-                    task_prompt += f"\n\nRelevant concepts: {concepts_str}"
-                
-                if constraints:
-                    task_prompt += f"\n\nConstraints: {constraints}"
-                
-                if format_info:
-                    task_prompt += f"\n\nExpected output format: {format_info}"
-                
+                task_prompt += f"\n\nUse the data file: {file_name}"
+                task_prompt += f"\n\nConstraints: {constraints}"
+                task_prompt += f"\n\nExpected output format: {format_info}"
+    
                 # Create ONE HTTP client for this task (completely isolated)
                 limits = httpx.Limits(max_keepalive_connections=0, max_connections=1)
                 http_client = httpx.AsyncClient(timeout=timeout, limits=limits)
@@ -376,22 +366,15 @@ Here is the question you need to answer:
         # Create pydantic eval cases from DABench tasks
         cases = []
         for i, task in enumerate(tasks):
-            task_input_data = {
-                'question': task['question'],
-                'constraints': task.get('constraints', ''),
-                'format': task.get('format', ''),
-                'file_name': task.get('file_name', ''),
-                'concepts': task.get('concepts', []),
-            }
             
             case = Case(
                 name=task['task_id'],
-                inputs=json.dumps(task_input_data),
+                inputs={'question': task['question'], 'constraints': task['constraints'], 'format': task['format'], 'file_name': task['file_name']},
                 expected_output=task['correct_answer'],
                 metadata={
                     'level': task['level'],
                     'task_id': task['task_id'],
-                    'question': task['question']
+                    'concepts': task['concepts'],
                 }
             )
             cases.append(case)
@@ -419,10 +402,10 @@ Here is the question you need to answer:
         
         logger.info(f"🔍 Running Pydantic Eval with {len(cases)} cases and {len(evaluators)} evaluators...")
         
-        # Run evaluation
+        # Run evaluation with limited concurrency to avoid overwhelming the white agent
         start_time = time.time()
         try:
-            report = await dataset.evaluate(evaluate_white_agent)
+            report = await dataset.evaluate(evaluate_white_agent, max_concurrency=1)
             evaluation_time = time.time() - start_time
             
             logger.info(f"✅ Pydantic Eval completed in {evaluation_time:.2f} seconds")
@@ -460,8 +443,16 @@ Here is the question you need to answer:
             # Generate timestamp for filename
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             
-            # Create filename with timestamp and case count
-            filename = f"pydantic_eval_report_{timestamp}_{total_cases}cases.json"
+            # Get model names for both agents
+            green_model = os.getenv("GREEN_AGENT_MODEL")
+            white_model = os.getenv("WHITE_AGENT_MODEL")
+            
+            # Clean model names for filename (replace special characters)
+            green_model_clean = green_model.replace(":", "_").replace("-", "_")
+            white_model_clean = white_model.replace(":", "_").replace("-", "_")
+            
+            # Create filename with timestamp, model names, and case count
+            filename = f"pydantic_eval_report_{timestamp}_{green_model_clean}_vs_{white_model_clean}_{total_cases}cases.json"
             filepath = os.path.join(results_dir, filename)
             
             # Extract structured data from EvaluationReport using the proper API

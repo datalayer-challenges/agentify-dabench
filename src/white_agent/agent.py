@@ -86,7 +86,7 @@ class WhiteWorker(Worker[Context]):
             
             # Get the correct Pydantic AI model configuration
             logger.info(f"🤖 Setting up Pydantic AI model...")
-            pydantic_model = get_pydantic_ai_model()
+            pydantic_model = get_pydantic_ai_model('white')
             logger.info(f"✅ Pydantic AI model setup complete with model: {pydantic_model}")
             
             # Create Pydantic AI agent with MCP tools

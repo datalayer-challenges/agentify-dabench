@@ -4,7 +4,9 @@ Shared utilities for agents.
 
 import os
 from openai import OpenAI
-from pydantic_ai_plugins.openai_schema import OpenAISchema
+from typing import TypeAlias
+
+OpenAISchema: TypeAlias = str
 
 # --- Logging ---
 
@@ -15,8 +17,12 @@ from logging.handlers import TimedRotatingFileHandler
 def setup_logger(name: str, log_dir: str = "logs"):
     """Sets up a logger that writes to a file and streams to the console."""
     
+    # If log_dir is not provided, use the environment variable or a default
+    if not log_dir:
+        log_dir = os.getenv("AGENT_LOG_DIR", "logs")
+
     # Create log directory if it doesn't exist
-    project_root = os.path.dirname(os.path.dirname(__file__))
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     log_path = os.path.join(project_root, log_dir)
     if not os.path.exists(log_path):
         os.makedirs(log_path)
@@ -45,13 +51,20 @@ def setup_logger(name: str, log_dir: str = "logs"):
     
     return logger
 
-def setup_llm_client():
+def setup_llm_client(agent_type=None):
     """
     Setup LLM client using LiteLLM for both Green and White agents.
     Returns (llm_client, model_name).
+    
+    Args:
+        agent_type (str, optional): Either 'green', 'white', or None for default behavior
     """
-    # Get model configuration from environment
-    model_name = os.getenv("LLM_MODEL", "gpt-3.5-turbo")
+    # Get model configuration from environment - agent-specific or fallback to general
+    if agent_type == 'green':
+        model_name = os.getenv("GREEN_AGENT_MODEL")
+    elif agent_type == 'white':
+        model_name = os.getenv("WHITE_AGENT_MODEL")
+    
     api_key = os.getenv("LLM_API_KEY")
     
     if not api_key:
@@ -97,12 +110,20 @@ def setup_llm_client():
         print(f"⚠️  LLM setup error: {e}")
         return None, model_name
 
-def get_pydantic_ai_model() -> OpenAISchema:
+def get_pydantic_ai_model(agent_type=None) -> OpenAISchema:
     """
     Get the correct model name format for Pydantic AI based on environment configuration.
     Returns the model name in the format expected by Pydantic AI.
+    
+    Args:
+        agent_type (str, optional): Either 'green', 'white', or None for default behavior
     """
-    model_name = os.getenv("LLM_MODEL", "gpt-3.5-turbo")
+    # Get model configuration from environment - agent-specific or fallback to general
+    if agent_type == 'green':
+        model_name = os.getenv("GREEN_AGENT_MODEL")
+    elif agent_type == 'white':
+        model_name = os.getenv("WHITE_AGENT_MODEL")
+    
     api_key = os.getenv("LLM_API_KEY")
     azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
     

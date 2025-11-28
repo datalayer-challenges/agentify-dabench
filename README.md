@@ -44,30 +44,11 @@ cp .env.example .env
 # Start both green and white agents
 python launcher.py
 
-# Quick evaluation (3 tasks)
-python launcher.py --evaluate
-
-# Development evaluation (10 tasks)
-python launcher.py --evaluate --sample-mode dev
-
 # Full dataset evaluation (450 tasks)
-python launcher.py --evaluate --full-dataset
-
-# Interactive mode with commands
-python launcher.py --interactive
+python launcher.py --evaluate --full
 
 # Quick sample evaluation (1 task)
 python launcher.py --evaluate --quick-sample 1
-```
-
-### Individual Agent Launch
-
-```bash
-# Start only green agent (evaluator)
-python launcher.py --green-only
-
-# Start only white agent (test subject)
-python launcher.py --white-only
 ```
 
 ## Configuration
@@ -81,22 +62,13 @@ The system uses environment variables for configuration. Copy `.env.example` to 
 
 # LLM Configuration (LiteLLM supports 100+ providers)
 LLM_API_KEY=your_api_key_here
-LLM_MODEL=gpt-3.5-turbo     # Any LiteLLM-supported model
+GREEN_AGENT_MODEL=gpt-3.5-turbo     # Any LiteLLM-supported model
+WHITE_AGENT_MODEL=gpt-4             # Any LiteLLM-supported model
 
 # For Azure OpenAI (additional config)
 AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
 AZURE_OPENAI_API_VERSION=2024-02-15-preview
 ```
-
-### Supported LLM Providers (via LiteLLM)
-
-- **OpenAI**: `gpt-3.5-turbo`, `gpt-4`, `gpt-4-turbo`
-- **Azure OpenAI**: `azure/your-deployment-name`
-- **Anthropic**: `claude-3-haiku-20240307`, `claude-3-sonnet-20240229`, `claude-3-opus-20240229`
-- **Google**: `gemini-pro`, `gemini-1.5-pro`
-- **Cohere**: `command-r`, `command-r-plus`
-- **Ollama**: `ollama/llama2`, `ollama/codellama`
-- **100+ more providers** supported via LiteLLM
 
 ## JupyterLab MCP Server Integration
 

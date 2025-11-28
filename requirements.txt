@@ -6,15 +6,14 @@ python-dotenv>=1.0.0
 litellm>=1.40.0
 pydantic-ai
 pydantic-evals
-jupyter-mcp-server>=0.20.1
+jupyter-mcp-server>=0.21.0
 jupyterlab==4.4.1
 jupyter-collaboration==4.0.2
 ipykernel
-jupyter_mcp_tools
 httpx
 requests
 pydantic-evals
-pydantic-ai-plugins
+pydantic-ai
 
 # LiteLLM handles all providers automatically
 # Supports: OpenAI, Azure OpenAI, Anthropic, Google, Cohere, Ollama, and 100+ more
