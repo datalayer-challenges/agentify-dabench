@@ -1,0 +1,132 @@
+{
+  "metadata": {
+    "evaluation_time_seconds": 47.08437490463257,
+    "total_cases": 3,
+    "timestamp": "20251128_155633",
+    "success_rate": 1.0,
+    "generated_by": "Green Agent - Pydantic Eval"
+  },
+  "report": {
+    "name": "evaluate_white_agent",
+    "cases": [
+      {
+        "name": "0",
+        "inputs": {
+          "question": "Calculate the mean fare paid by the passengers.",
+          "constraints": "Calculate the mean fare using Python's built-in statistics module or appropriate statistical method in pandas. Rounding off the answer to two decimal places.",
+          "format": "@mean_fare[mean_fare_value] where \"mean_fare_value\" is a floating-point number rounded to two decimal places.",
+          "file_name": "test_ave.csv"
+        },
+        "expected_output": "mean_fare: 34.65",
+        "output": "@mean_fare[34.65]",
+        "metadata": {
+          "level": "easy",
+          "task_id": "0",
+          "concepts": [
+            "Summary Statistics"
+          ]
+        },
+        "scores": {},
+        "labels": {},
+        "metrics": {}
+      },
+      {
+        "name": "5",
+        "inputs": {
+          "question": "Generate a new feature called \"FamilySize\" by summing the \"SibSp\" and \"Parch\" columns. Then, calculate the Pearson correlation coefficient (r) between the \"FamilySize\" and \"Fare\" columns.",
+          "constraints": "Create a new column 'FamilySize' that is the sum of 'SibSp' and 'Parch' for each row.\nCalculate the Pearson correlation coefficient between 'FamilySize' and 'Fare'\nDo not perform any further data cleaning or preprocessing steps before calculating the correlation.",
+          "format": "@correlation_coefficient[r_value]\nwhere \"r_value\" is the Pearson correlation coefficient between 'FamilySize' and 'Fare', a number between -1 and 1, rounded to two decimal places.",
+          "file_name": "test_ave.csv"
+        },
+        "expected_output": "correlation_coefficient: 0.21",
+        "output": "The file \"test_ave.csv\" is not found in the data directory or any accessible directory. Could you please verify the filename or provide the correct path to the file?",
+        "metadata": {
+          "level": "medium",
+          "task_id": "5",
+          "concepts": [
+            "Feature Engineering",
+            "Correlation Analysis"
+          ]
+        },
+        "scores": {},
+        "labels": {},
+        "metrics": {}
+      },
+      {
+        "name": "6",
+        "inputs": {
+          "question": "Create a new column called \"AgeGroup\" that categorizes the passengers into four age groups: 'Child' (0-12 years old), 'Teenager' (13-19 years old), 'Adult' (20-59 years old), and 'Elderly' (60 years old and above). Then, calculate the mean fare for each age group.",
+          "constraints": "Make sure to round the mean fare of each group to 2 decimal places.",
+          "format": "@mean_fare_child[mean_fare], @mean_fare_teenager[mean_fare], @mean_fare_adult[mean_fare], @mean_fare_elderly[mean_fare], where \"mean_fare\" is a float number rounded to 2 decimal places.",
+          "file_name": "test_ave.csv"
+        },
+        "expected_output": "mean_fare_elderly: 43.47, mean_fare_teenager: 31.98, mean_fare_child: 31.09, mean_fare_adult: 35.17",
+        "output": "@mean_fare_child[31.09], @mean_fare_teenager[31.98], @mean_fare_adult[35.17], @mean_fare_elderly[43.47]",
+        "metadata": {
+          "level": "medium",
+          "task_id": "6",
+          "concepts": [
+            "Feature Engineering",
+            "Summary Statistics"
+          ]
+        },
+        "scores": {},
+        "labels": {},
+        "metrics": {}
+      }
+    ],
+    "failures": [],
+    "experiment_metadata": null,
+    "total_cases": 3,
+    "successful_cases": 3,
+    "failed_cases": 0,
+    "success_rate": 1.0,
+    "formatted_summary": [
+      "                        Evaluation Summary: evaluate_white_agent                         ",
+      "┏━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┓",
+      "┃ Case ID  ┃ Expected Output     ┃ Outputs             ┃ Assertions          ┃ Duration ┃",
+      "┡━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━┩",
+      "│ 0        │ mean_fare: 34.65    │ @mean_fare[34.65]   │ LLMJudge: ✔         │    20.1s │",
+      "│          │                     │                     │   Reason: The       │          │",
+      "│          │                     │                     │ output correctly    │          │",
+      "│          │                     │                     │ calculates the mean │          │",
+      "│          │                     │                     │ fare as specified,  │          │",
+      "│          │                     │                     │ rounded to two      │          │",
+      "│          │                     │                     │ decimal places, and │          │",
+      "│          │                     │                     │ adheres to the      │          │",
+      "│          │                     │                     │ required format.    │          │",
+      "│          │                     │                     │                     │          │",
+      "│          │                     │                     │                     │          │",
+      "├──────────┼─────────────────────┼─────────────────────┼─────────────────────┼──────────┤",
+      "│ 5        │ correlation_coeffic │ The file            │ LLMJudge: ✗         │    10.1s │",
+      "│          │ ient: 0.21          │ \"test_ave.csv\" is   │   Reason: The       │          │",
+      "│          │                     │ not found in the    │ output does not     │          │",
+      "│          │                     │ data directory or   │ calculate the       │          │",
+      "│          │                     │ any accessible      │ correlation         │          │",
+      "│          │                     │ directory. Could    │ coefficient as      │          │",
+      "│          │                     │ you please verify   │ requested and       │          │",
+      "│          │                     │ the filename or     │ instead provides an │          │",
+      "│          │                     │ provide the correct │ error related to    │          │",
+      "│          │                     │ path to the file?   │ file access. The    │          │",
+      "│          │                     │                     │ response is not     │          │",
+      "│          │                     │                     │ accurate according  │          │",
+      "│          │                     │                     │ to the rubric.      │          │",
+      "│          │                     │                     │                     │          │",
+      "│          │                     │                     │                     │          │",
+      "├──────────┼─────────────────────┼─────────────────────┼─────────────────────┼──────────┤",
+      "│ 6        │ mean_fare_elderly:  │ @mean_fare_child[31 │ LLMJudge: ✔         │    10.1s │",
+      "│          │ 43.47,              │ .09],               │   Reason: The       │          │",
+      "│          │ mean_fare_teenager: │ @mean_fare_teenager │ output is accurate  │          │",
+      "│          │ 31.98,              │ [31.98],            │ based on the rubric │          │",
+      "│          │ mean_fare_child:    │ @mean_fare_adult[35 │ and matches the     │          │",
+      "│          │ 31.09,              │ .17],               │ expected mean fares │          │",
+      "│          │ mean_fare_adult:    │ @mean_fare_elderly[ │ for each age group. │          │",
+      "│          │ 35.17               │ 43.47]              │                     │          │",
+      "│          │                     │                     │                     │          │",
+      "├──────────┼─────────────────────┼─────────────────────┼─────────────────────┼──────────┤",
+      "│ Averages │                     │                     │ 66.7% ✔             │    13.4s │",
+      "└──────────┴─────────────────────┴─────────────────────┴─────────────────────┴──────────┘",
+      ""
+    ]
+  }
+}

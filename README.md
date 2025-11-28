@@ -38,17 +38,36 @@ cp .env.example .env
 # Edit .env with your API keys and model preferences
 ```
 
-### Launch Both Agents
+### Option 1: All-in-One Launcher Script
 
 ```bash
 # Start both green and white agents
 python launcher.py
 
-# Full dataset evaluation (450 tasks)
+# Full dataset evaluation
 python launcher.py --evaluate --full
 
-# Quick sample evaluation (1 task)
-python launcher.py --evaluate --quick-sample 1
+# Quick sample evaluation (3 tasks)
+python launcher.py --evaluate --quick-sample 3
+```
+
+### Option 2: Separate Services with Makefile
+
+For better control and monitoring, use the 4-terminal workflow:
+
+```bash
+# Terminal 1: Start MCP Server
+make start-mcp
+
+# Terminal 2: Start White Agent (Test Subject)  
+make start-white
+
+# Terminal 3: Start Green Agent (Evaluator)
+make start-green
+
+# Terminal 4: Run Evaluation
+make run-eval-monitor           # Full evaluation with real-time monitoring
+make run-eval-quick-monitor     # Quick 3-task evaluation with real-time monitoring
 ```
 
 ## Configuration
@@ -97,11 +116,4 @@ headers = {"Authorization": f"Bearer {self.jupyter_token}"}
 
 ### Data Context Files
 
-The White Agent has access to DABench data files in `agent-workings/data/`:
-
-- **`payments.csv`** - Transaction data for financial analysis
-- **`acquirer_countries.csv`** - Country mapping data
-- **`merchant_category_codes.csv`** - Business category classifications
-- **`merchant_data.json`** - Merchant information database
-- **`fees.json`** - Fee structure data
-- **`manual.md`** - Documentation and context information
+The White Agent has access to DABench data files in `agent-workings/data/`.
