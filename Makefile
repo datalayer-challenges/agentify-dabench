@@ -1,7 +1,7 @@
 .PHONY: help start-mcp start-white start-green start-all stop clean logs evaluate evaluate-quick evaluate-dev evaluate-full check-env
 
 # Default Python executable
-PYTHON := python3
+PYTHON := python
 
 # Directories
 PROJECT_ROOT := $(shell pwd)
@@ -34,17 +34,25 @@ help: ## Show this help message
 	@echo "$(YELLOW)Available commands:$(RESET)"
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  $(GREEN)%-20s$(RESET) %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@echo ""
-	@echo "$(YELLOW)Recommended Workflow:$(RESET)"
-	@echo "  $(BLUE)1. Start Services (3 terminals):$(RESET)"
-	@echo "    Terminal 1: $(GREEN)make start-mcp$(RESET)        # Start MCP server"
-	@echo "    Terminal 2: $(GREEN)make start-white$(RESET)      # Start white agent"  
-	@echo "    Terminal 3: $(GREEN)make start-green$(RESET)      # Start green agent"
+	@echo "$(YELLOW)Recommended Workflows:$(RESET)"
+	@echo "  $(BLUE)1. Local Development (3 terminals):$(RESET)"
+	@echo "    Terminal 1: $(GREEN)make start-mcp$(RESET)        # Start MCP server locally"
+	@echo "    Terminal 2: $(GREEN)make start-white$(RESET)      # Start white agent locally"  
+	@echo "    Terminal 3: $(GREEN)make start-green$(RESET)      # Start green agent locally"
 	@echo ""
-	@echo "  $(BLUE)2. Run Evaluation (4th terminal):$(RESET)"
-	@echo "    Terminal 4: $(GREEN)make run-eval$(RESET)         # Send evaluation request"
+	@echo "  $(BLUE)2. Docker Development (3 terminals):$(RESET)"
+	@echo "    Terminal 1: $(GREEN)make docker-start-jupyter$(RESET) # Start Jupyter MCP in Docker"
+	@echo "    Terminal 2: $(GREEN)make docker-start-white$(RESET)   # Start white agent in Docker"  
+	@echo "    Terminal 3: $(GREEN)make docker-start-green$(RESET)   # Start green agent in Docker"
 	@echo ""
-	@echo "  $(BLUE)Alternative:$(RESET)"
+	@echo "  $(BLUE)3. Run Evaluation:$(RESET)"
+	@echo "    Local: $(GREEN)make run-eval$(RESET)         # Send to localhost agents"
+	@echo "    Docker: $(GREEN)make docker-run-eval$(RESET) # Send to Docker agents (Mac)"
+	@echo ""
+	@echo "  $(BLUE)Alternative Options:$(RESET)"
 	@echo "    $(GREEN)make evaluate-quick$(RESET)   # All-in-one launcher.py"
+	@echo "    $(GREEN)make docker-help$(RESET)      # See all Docker commands"
+	@echo "    $(GREEN)make docker-up$(RESET)        # Start all with Docker Compose"
 
 check-env: ## Check environment setup
 	@echo "$(BLUE)🔧 Checking environment setup...$(RESET)"
@@ -114,16 +122,23 @@ run-eval-quick-monitor: ## Send quick evaluation request and monitor (keeps term
 	@echo "$(BLUE)⚡ Sending quick evaluation with monitoring...$(RESET)"
 	@$(PYTHON) send_evaluation.py --tasks 3 --monitor
 
-start-green-eval: setup-logs ## DEPRECATED - Use separate start-green + run-eval
-	@echo "$(YELLOW)⚠️  DEPRECATED: Use 'make start-green' then 'make run-eval' instead$(RESET)"
-	@echo "$(BLUE)🟢 Starting Green Agent and triggering full evaluation...$(RESET)"
-	@echo "$(CYAN)🔗 Green agent endpoint: http://localhost:$(GREEN_PORT)$(RESET)"
-	@echo "$(YELLOW)🚀 Starting Green Agent in background...$(RESET)"
-	@cd $(GREEN_DIR) && $(PYTHON) agent.py > ../../$(LOG_DIR)/green_agent.log 2>&1 & 
-	@echo "$(BLUE)⏳ Waiting 5s for green agent startup...$(RESET)"
-	@sleep 5
-	@echo "$(BLUE)🎯 Sending full evaluation request and monitoring progress...$(RESET)"
-	@$(PYTHON) send_evaluation.py --tasks 0 --monitor
+# Docker evaluation commands
+# Note: Green agent (in Docker) needs host.docker.internal to reach white agent (also in Docker via port forwarding)
+docker-run-eval: ## Send evaluation request to Docker containers
+	@echo "$(BLUE)🐳 Sending full evaluation request to Docker containers...$(RESET)"
+	@$(PYTHON) send_evaluation.py --tasks 0 --green-url http://localhost:8000 --white-url http://host.docker.internal:8001
+
+docker-run-eval-quick: ## Send quick evaluation request to Docker containers
+	@echo "$(BLUE)🐳⚡ Sending quick evaluation to Docker containers...$(RESET)"
+	@$(PYTHON) send_evaluation.py --tasks 3 --green-url http://localhost:8000 --white-url http://host.docker.internal:8001
+
+docker-run-eval-monitor: ## Send evaluation request to Docker containers with monitoring
+	@echo "$(BLUE)🐳🔍 Sending full evaluation to Docker containers with monitoring...$(RESET)"
+	@$(PYTHON) send_evaluation.py --tasks 0 --monitor --green-url http://localhost:8000 --white-url http://host.docker.internal:8001
+
+docker-run-eval-quick-monitor: ## Send quick evaluation request to Docker containers with monitoring
+	@echo "$(BLUE)🐳⚡ Sending quick evaluation to Docker containers with monitoring...$(RESET)"
+	@$(PYTHON) send_evaluation.py --tasks 3 --monitor --green-url http://localhost:8000 --white-url http://host.docker.internal:8001
 
 start-all: ## Use launcher.py for all-in-one startup (background processes)
 	@echo "$(BLUE)🚀 Starting all services using launcher.py...$(RESET)"
@@ -188,47 +203,6 @@ logs: ## Show recent logs from all services
 		echo "$(YELLOW)No log directories found$(RESET)"; \
 	fi
 
-evaluate-quick: ## Run quick evaluation (3 tasks) using launcher.py
-	@echo "$(BLUE)⚡ Running quick evaluation...$(RESET)"
-	@$(PYTHON) launcher.py --evaluate --quick-sample 3
-
-evaluate-dev: ## Run development evaluation (~10 tasks) using launcher.py
-	@echo "$(BLUE)🔧 Running development evaluation...$(RESET)"
-	@$(PYTHON) launcher.py --evaluate --sample-mode dev
-
-evaluate-full: ## Run full dataset evaluation (~450 tasks) using launcher.py
-	@echo "$(BLUE)🚀 Running full evaluation...$(RESET)"
-	@$(PYTHON) launcher.py --evaluate --full-dataset
-
-evaluate: evaluate-quick ## Alias for evaluate-quick
-
-# Development and debugging targets  
-debug-white: setup-logs ## Start white agent with verbose logging (foreground)
-	@echo "$(BLUE)🐛 Starting white agent in debug mode...$(RESET)"
-	@cd $(WHITE_DIR) && $(PYTHON) agent.py
-
-debug-green: setup-logs ## Start green agent with verbose logging (foreground)
-	@echo "$(BLUE)🐛 Starting green agent in debug mode...$(RESET)"
-	@cd $(GREEN_DIR) && $(PYTHON) agent.py
-
-install: ## Install dependencies
-	@echo "$(BLUE)📦 Installing dependencies...$(RESET)"
-	@pip install -r requirements.txt
-	@echo "$(GREEN)✅ Dependencies installed$(RESET)"
-
-setup: install ## Setup environment (install deps + copy .env.example)
-	@if [ ! -f .env ]; then \
-		if [ -f .env.example ]; then \
-			cp .env.example .env; \
-			echo "$(GREEN)✅ .env file created from .env.example$(RESET)"; \
-			echo "$(YELLOW)⚠️  Please edit .env with your API keys and preferences$(RESET)"; \
-		else \
-			echo "$(RED)❌ .env.example not found$(RESET)"; \
-		fi; \
-	else \
-		echo "$(GREEN)✅ .env file already exists$(RESET)"; \
-	fi
-
 # Watch logs in real-time
 watch-logs: ## Watch logs in real-time
 	@if [ -d "$(shell ls -1dt $(LOGS_DIR)/run_* 2>/dev/null | head -n1)" ]; then \
@@ -238,3 +212,83 @@ watch-logs: ## Watch logs in real-time
 	else \
 		echo "$(YELLOW)No log directories found. Start services first.$(RESET)"; \
 	fi
+
+# ============================================================================
+# Docker Commands
+# ============================================================================
+
+DOCKER_BUILD := docker build
+DOCKER_RUN := docker run
+
+docker-help: ## Show Docker-specific commands
+	@echo "$(CYAN)🐳 Docker Commands:$(RESET)"
+	@echo ""
+	@echo "$(YELLOW)Build Commands:$(RESET)"
+	@echo "  $(GREEN)docker-build-all$(RESET)     Build all Docker images"
+	@echo "  $(GREEN)docker-build-white$(RESET)   Build White Agent image"
+	@echo "  $(GREEN)docker-build-green$(RESET)   Build Green Agent image"
+	@echo "  $(GREEN)docker-build-jupyter$(RESET) Build Jupyter MCP image"
+	@echo ""
+	@echo "$(YELLOW)Service Commands:$(RESET)"
+	@echo "  $(GREEN)docker-start-jupyter$(RESET) Start Jupyter MCP (foreground)"
+	@echo "  $(GREEN)docker-start-white$(RESET)   Start White Agent (foreground)"
+	@echo "  $(GREEN)docker-start-green$(RESET)   Start Green Agent (foreground)"
+	@echo ""
+	@echo "$(YELLOW)Management Commands:$(RESET)"
+	@echo "  $(GREEN)docker-stop$(RESET)          Stop all Docker containers"
+	@echo "  $(GREEN)docker-clean$(RESET)         Clean up Docker containers and images"
+
+docker-build-all: ## Build all Docker images
+	@$(DOCKER_BUILD) -f Dockerfile.white -t agentbeats-white:latest .
+	@$(DOCKER_BUILD) -f Dockerfile.green -t agentbeats-green:latest .
+	@$(DOCKER_BUILD) -f Dockerfile.jupyter -t agentbeats-jupyter:latest .
+
+docker-build-white: ## Build White Agent Docker image
+	@$(DOCKER_BUILD) -f Dockerfile.white -t agentbeats-white:latest .
+
+docker-build-green: ## Build Green Agent Docker image
+	@$(DOCKER_BUILD) -f Dockerfile.green -t agentbeats-green:latest .
+
+docker-build-jupyter: ## Build Jupyter MCP Docker image
+	@$(DOCKER_BUILD) -f Dockerfile.jupyter -t agentbeats-jupyter:latest .
+
+docker-start-jupyter: ## Start Jupyter MCP in foreground (keeps terminal busy)
+	@if [ ! -f .env ]; then echo "$(RED)❌ .env file not found$(RESET)"; exit 1; fi
+	@$(DOCKER_RUN) --rm -it \
+		--env-file .env \
+		-p 8888:8888 \
+		-v $(PWD)/agent-workings:/app/agent-workings \
+		-v $(PWD)/logs:/app/logs \
+		agentbeats-jupyter:latest
+
+docker-start-white: ## Start White Agent in foreground (keeps terminal busy)
+	@if [ ! -f .env ]; then echo "$(RED)❌ .env file not found$(RESET)"; exit 1; fi
+	@$(DOCKER_RUN) --rm -it \
+		--env-file .env \
+		-e JUPYTER_BASE_URL=http://host.docker.internal:8888 \
+		-p 8001:8001 \
+		-v $(PWD)/logs:/app/logs \
+		-v $(PWD)/results:/app/results \
+		agentbeats-white:latest
+
+docker-start-green: ## Start Green Agent in foreground (keeps terminal busy)
+	@if [ ! -f .env ]; then echo "$(RED)❌ .env file not found$(RESET)"; exit 1; fi
+	@$(DOCKER_RUN) --rm -it \
+		--env-file .env \
+		-p 8000:8000 \
+		-v $(PWD)/logs:/app/logs \
+		-v $(PWD)/results:/app/results \
+		-v $(PWD)/data-dabench:/app/data-dabench \
+		agentbeats-green:latest
+
+docker-stop: ## Stop all Docker containers
+	@docker stop $$(docker ps -q --filter ancestor=agentbeats-jupyter) 2>/dev/null || true
+	@docker stop $$(docker ps -q --filter ancestor=agentbeats-white) 2>/dev/null || true
+	@docker stop $$(docker ps -q --filter ancestor=agentbeats-green) 2>/dev/null || true
+
+docker-clean: ## Clean up Docker containers and images
+	@docker stop $$(docker ps -q --filter ancestor=agentbeats-jupyter) 2>/dev/null || true
+	@docker stop $$(docker ps -q --filter ancestor=agentbeats-white) 2>/dev/null || true
+	@docker stop $$(docker ps -q --filter ancestor=agentbeats-green) 2>/dev/null || true
+	@docker rmi agentbeats-jupyter agentbeats-white agentbeats-green 2>/dev/null || true
+	@docker system prune -f

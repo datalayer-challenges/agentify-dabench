@@ -1,6 +1,6 @@
 # DABench AgentBeats Implementation
 
-A complete A2A (Agent-to-Agent) compatible implementation of the DABench benchmark, following the AgentBeats methodology with Green Agent (evaluator) and White Agent (test subject) architecture.
+A complete A2A (Agent-to-Agent) compatible implementation of the [DABench](https://github.com/InfiAgent/InfiAgent/tree/main/examples/DA-Agent/data) benchmark, following the [AgentBeats](https://rdi.berkeley.edu/agentx-agentbeats) methodology with Green Agent (evaluator) and White Agent (test subject) architecture.
 
 ## Overview
 
@@ -16,14 +16,11 @@ The Data Agent Benchmark (DABench) is designed to measure and push the state-of-
 
 ## Features
 
-- ✅ **A2A Protocol Compatible**: Full compatibility with Agent-to-Agent communication standard
-- ✅ **DABench Scoring**: DABench benchmark scoring methodology with Pydantic Eval
-- ✅ **AgentBeats Architecture**: Proper green/white agent separation
-- ✅ **LLM Provider Integration**: 100+ LLM providers via LiteLLM (OpenAI, Anthropic, Google, Cohere, Ollama, etc.)
-- ✅ **MCP Tools Integration**: White agent supports jupyter-mcp-server tools
-- ✅ **One-Command Launch**: Simple launcher script for complete setup
-- ✅ **Interactive Mode**: Real-time evaluation and monitoring capabilities
-- ✅ **Environment Configuration**: Flexible configuration via .env files
+- ✅ **A2A Protocol Compatible**: Full compatibility with Agent-to-Agent standard using [Pydantic FastA2A](https://github.com/pydantic/fasta2a)
+- ✅ **[AgentBeats](https://rdi.berkeley.edu/agentx-agentbeats) Architecture**: Proper green/white agent separation
+- ✅ **DABench Scoring**: [DABench](https://github.com/InfiAgent/InfiAgent/tree/main/examples/DA-Agent/data) benchmark dataset 
+- ✅ **PydanticA AI Agent and Evaluation**: Utilizes [Pydantic AI](https://ai.pydantic.dev/evals/evaluators/llm-judge/) for agent and evaluation
+- ✅ **MCP Tools Integration**: White agent supports [jupyter-mcp-server](https://github.com/datalayer/jupyter-mcp-server) tools
 
 ## Quick Start
 
@@ -70,6 +67,38 @@ make run-eval-monitor           # Full evaluation with real-time monitoring
 make run-eval-quick-monitor     # Quick 3-task evaluation with real-time monitoring
 ```
 
+### Option 3: Docker Development
+
+For containerized development, use the Docker workflow:
+
+```bash
+# Build all Docker images (run this first or after code changes)
+make docker-build-all
+
+# Start services in separate terminals:
+# Terminal 1: Start Jupyter MCP Server
+make docker-start-jupyter
+
+# Terminal 2: Start White Agent (Test Subject)
+make docker-start-white
+
+# Terminal 3: Start Green Agent (Evaluator)
+make docker-start-green
+
+# Terminal 4: Run Evaluation (on Docker containers)
+make docker-run-eval-quick-monitor     # Quick 3-task evaluation with monitoring
+make docker-run-eval-monitor           # Full dataset evaluation with monitoring  
+```
+
+#### Platform-Specific Docker Configuration
+
+**macOS/Windows**: The Docker configuration uses `host.docker.internal` for container-to-host communication (default setup).
+
+**Linux**: Linux Docker doesn't support `host.docker.internal`. Add `--network=host` to these Makefile commands:
+- Line ~270: `docker-start-jupyter` command - add `--network=host \` after `@$(DOCKER_RUN) --rm -it \`
+- Line ~278: `docker-start-white` command - add `--network=host \` after `@$(DOCKER_RUN) --rm -it \`  
+- Line ~287: `docker-start-green` command - add `--network=host \` after `@$(DOCKER_RUN) --rm -it \`
+
 ## Configuration
 
 ### Environment Variables
@@ -89,9 +118,9 @@ AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
 AZURE_OPENAI_API_VERSION=2024-02-15-preview
 ```
 
-## JupyterLab MCP Server Integration
+## Jupyter MCP Server Integration
 
-The White Agent is integrated with **JupyterLab MCP (Model Context Protocol) Server** for enhanced data analysis and code execution capabilities. This integration provides the agent with powerful computational tools for autonomous problem-solving.
+The White Agent is integrated with [**Jupyter MCP (Model Context Protocol) Server**](https://github.com/datalayer/jupyter-mcp-server) for enhanced data analysis and code execution capabilities. This integration provides the agent with powerful computational tools for autonomous problem-solving.
 
 
 ### Authentication & Security

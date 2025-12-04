@@ -301,13 +301,15 @@ def create_white_agent() -> FastA2A:
     
     # Create worker with Pydantic AI MCP
     jupyter_token = os.getenv("JUPYTER_TOKEN")
+    jupyter_base_url = os.getenv("JUPYTER_BASE_URL", "http://localhost:8888")
     logger.info(f"🔑 White Agent token: {jupyter_token[:8] + '...' if jupyter_token else 'None'}")
+    logger.info(f"🌐 Jupyter MCP base URL: {jupyter_base_url}")
     
     worker = WhiteWorker(
         broker=broker, 
         storage=storage, 
         jupyter_token=jupyter_token,
-        base_url="http://localhost:8888"
+        base_url=jupyter_base_url
     )
     
     # Add lifespan to start worker

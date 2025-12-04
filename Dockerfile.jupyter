@@ -1,0 +1,60 @@
+# Dockerfile for Jupyter MCP Server
+FROM python:3.11-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements and install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install additional Jupyter dependencies
+RUN pip install --no-cache-dir \
+    notebook \
+    ipywidgets \
+    matplotlib \
+    seaborn \
+    plotly \
+    pandas \
+    numpy \
+    scipy
+
+# Copy only necessary files for Jupyter MCP
+COPY src/ ./src/
+COPY agent-workings/ ./agent-workings/
+
+# Create directories
+RUN mkdir -p logs results agent-workings
+
+# Set environment variables for Jupyter
+ENV PYTHONPATH=/app:/app/src
+ENV JUPYTER_PORT=8888
+ENV JUPYTER_ENABLE_LAB=yes
+
+# Expose Jupyter port
+EXPOSE 8888
+
+# Create jupyter user (security best practice)
+RUN useradd -m -s /bin/bash jupyter && \
+    chown -R jupyter:jupyter /app
+
+# Switch to jupyter user
+USER jupyter
+
+# Health check for Jupyter (uses token from environment)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f "http://localhost:8888/api/status?token=${JUPYTER_TOKEN}" || exit 1
+
+# Set working directory to agent-workings for Jupyter context
+WORKDIR /app/agent-workings
+
+# Default command for Jupyter MCP server (uses token from environment)
+CMD ["sh", "-c", "jupyter lab --port=8888 --no-browser --ip=0.0.0.0 --allow-root --ServerApp.token=${JUPYTER_TOKEN} --ServerApp.allow_origin=* --ServerApp.disable_check_xsrf=True"]
