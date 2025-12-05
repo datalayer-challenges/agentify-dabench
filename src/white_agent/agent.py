@@ -273,11 +273,6 @@ Your workflow should be:
                 
                 # Delete new files using execute_code with shell commands
                 for file_path in new_files:
-                    # Skip certain files we shouldn't delete
-                    if file_path in ['notebook.ipynb'] or file_path.startswith('.') or file_path.startswith('data/'):
-                        logger.info(f"⏭️ Skipping protected file: {file_path}")
-                        continue
-                        
                     try:
                         logger.info(f"🗑️ Deleting file: {file_path}")
                         # Use execute_code to run shell command
@@ -342,7 +337,19 @@ Your workflow should be:
                 logger.info(f"✅ Agent execution completed!")
                 answer = str(result.output)
                 
+                # Extract token usage information
+                usage = result.usage()
+                usage_info = {
+                    'requests': usage.requests,
+                    'request_tokens': usage.request_tokens,
+                    'response_tokens': usage.response_tokens,
+                    'total_tokens': usage.total_tokens
+                }
+                
                 logger.info(f"💡 Generated answer: {answer}")
+                logger.info(f"📊 Token usage - Requests: {usage.requests}, "
+                           f"Input: {usage.request_tokens}, Output: {usage.response_tokens}, "
+                           f"Total: {usage.total_tokens}")
                 
             except Exception as e:
                 logger.error(f"❌ Pydantic AI execution failed: {e}")
@@ -350,10 +357,11 @@ Your workflow should be:
                 import traceback
                 logger.error(traceback.format_exc())
                 answer = f"Error during AI processing: {str(e)}"
+                usage_info = None  # No usage info available for failed executions
             
             # Create response message
             response_message = self._create_response_message(answer)
-            artifacts = self._create_response_artifacts(answer)
+            artifacts = self._create_response_artifacts(answer, usage_info)
             
             # Update context and complete task
             context.append(response_message)
@@ -424,17 +432,22 @@ Your workflow should be:
             message_id=str(uuid.uuid4())
         )
     
-    def _create_response_artifacts(self, answer: str) -> List[Artifact]:
-        """Create artifacts with the answer."""
+    def _create_response_artifacts(self, answer: str, usage_info: dict = None) -> List[Artifact]:
+        """Create artifacts with the answer and optional usage information."""
         artifacts = []
+        
+        # Create answer artifact data
+        artifact_data = {'answer': answer}
+        if usage_info:
+            artifact_data['token_usage'] = usage_info
         
         answer_artifact = Artifact(
             artifact_id=str(uuid.uuid4()),
             name="agent_answer",
-            description="Agent's answer to the question",
+            description="Agent's answer to the question with token usage",
             parts=[
                 TextPart(text=answer, kind='text'),
-                DataPart(data={'answer': answer}, kind='data')
+                DataPart(data=artifact_data, kind='data')
             ]
         )
         artifacts.append(answer_artifact)

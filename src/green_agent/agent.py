@@ -60,6 +60,7 @@ class GreenWorker(Worker[Context]):
     def __init__(self, broker, storage):
         super().__init__(storage=storage, broker=broker)
         self.pydantic_ai_model = get_pydantic_ai_model('green')
+        self.completed_tasks = []  # Store completed task results for token usage aggregation
     
     async def run_task(self, params: TaskSendParams) -> None:
         """Execute an evaluation task using Pydantic Eval."""
@@ -209,6 +210,9 @@ Example: "Please evaluate the agent at http://localhost:8001 using these tasks: 
         white_agent_url = eval_request['white_agent_url']
         tasks = eval_request['tasks']
         
+        # Clear completed tasks from previous evaluations
+        self.completed_tasks.clear()
+        
         logger.info(f"🤖 Starting Pydantic Eval assessment of agent at {white_agent_url}")
         logger.info(f"📝 Evaluating {len(tasks)} tasks")
         
@@ -331,6 +335,9 @@ Here is the question you need to answer:
                     if 'result' in task_response:
                         final_task = task_response['result']
                         
+                        # Store completed task for token usage aggregation
+                        self.completed_tasks.append(final_task)
+                        
                         # Use the outer self reference
                         agent_answer = self._extract_agent_answer(final_task)
                         
@@ -412,7 +419,7 @@ Here is the question you need to answer:
             report.print(include_reasons=True, include_output=True, include_expected_output=True)
             
             # Save report to results folder
-            await self._save_evaluation_report(report, evaluation_time, len(cases))
+            await self._save_evaluation_report(report, evaluation_time, len(cases), self.completed_tasks)
             
             # Return the report object directly
             return report
@@ -429,7 +436,7 @@ Here is the question you need to answer:
                 'total_cases': len(cases)
             }
     
-    async def _save_evaluation_report(self, report, evaluation_time: float, total_cases: int) -> None:
+    async def _save_evaluation_report(self, report, evaluation_time: float, total_cases: int, completed_tasks: List[Dict[str, Any]] = None) -> None:
         """Save the pydantic evaluation report to a results folder."""
         try:
             import os
@@ -546,13 +553,21 @@ Here is the question you need to answer:
                 }
                 success_rate = None
             
+            # Aggregate token usage from completed tasks
+            token_usage_summary = {}
+            if completed_tasks:
+                token_usage_summary = self._aggregate_token_usage(completed_tasks)
+                logger.info(f"📊 Token usage summary - Total: {token_usage_summary.get('total_tokens', 0)}, "
+                           f"Tasks with usage: {token_usage_summary.get('tasks_with_usage', 0)}")
+            
             # Add our custom metadata
             evaluation_metadata = {
                 "evaluation_time_seconds": evaluation_time,
                 "total_cases": total_cases,
                 "timestamp": timestamp,
                 "success_rate": report_data.get('success_rate', success_rate),
-                "generated_by": "Green Agent - Pydantic Eval"
+                "generated_by": "Green Agent - Pydantic Eval",
+                "token_usage": token_usage_summary
             }
             
             # Combine metadata with report
@@ -601,6 +616,47 @@ Here is the question you need to answer:
                                 return text
         
         return None
+
+    def _extract_token_usage(self, task_result: Dict[str, Any]) -> Optional[Dict[str, int]]:
+        """Extract token usage information from task result artifacts."""
+        if 'artifacts' in task_result:
+            for artifact in task_result['artifacts']:
+                for part in artifact.get('parts', []):
+                    if part.get('kind') == 'data':
+                        data = part.get('data', {})
+                        if isinstance(data, dict) and 'token_usage' in data:
+                            return data['token_usage']
+        return None
+
+    def _aggregate_token_usage(self, tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Aggregate token usage across all completed tasks."""
+        total_usage = {
+            'total_requests': 0,
+            'total_request_tokens': 0,
+            'total_response_tokens': 0,
+            'total_tokens': 0,
+            'tasks_with_usage': 0,
+            'average_tokens_per_task': 0
+        }
+        
+        usage_data = []
+        for task in tasks:
+            token_usage = self._extract_token_usage(task)
+            if token_usage:
+                usage_data.append(token_usage)
+                total_usage['total_requests'] += token_usage.get('requests', 0)
+                total_usage['total_request_tokens'] += token_usage.get('request_tokens', 0)
+                total_usage['total_response_tokens'] += token_usage.get('response_tokens', 0)
+                total_usage['total_tokens'] += token_usage.get('total_tokens', 0)
+                total_usage['tasks_with_usage'] += 1
+        
+        # Calculate averages
+        if total_usage['tasks_with_usage'] > 0:
+            total_usage['average_tokens_per_task'] = total_usage['total_tokens'] / total_usage['tasks_with_usage']
+            total_usage['average_request_tokens_per_task'] = total_usage['total_request_tokens'] / total_usage['tasks_with_usage']
+            total_usage['average_response_tokens_per_task'] = total_usage['total_response_tokens'] / total_usage['tasks_with_usage']
+        
+        return total_usage
     
     def _create_response_message(self, report) -> Message:
         """Create response message with Pydantic Eval results."""

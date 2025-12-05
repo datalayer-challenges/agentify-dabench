@@ -2,6 +2,8 @@
 
 A complete A2A (Agent-to-Agent) compatible implementation of the [DABench](https://github.com/InfiAgent/InfiAgent/tree/main/examples/DA-Agent/data) benchmark, following the [AgentBeats](https://rdi.berkeley.edu/agentx-agentbeats) methodology with Green Agent (evaluator) and White Agent (test subject) architecture.
 
+The Data Agent Benchmark (DABench) is designed to measure and push the state-of-the-art in **Data Analysis tasks** for AI agents.
+
 ## Overview
 
 ![](image.png)
@@ -10,14 +12,13 @@ This project implements the [DABench](https://github.com/InfiAgent/InfiAgent/tre
 
 - **Green Agent** (Evaluator): Manages DABench assessments and evaluates other agents
 - **White Agent** (Test Subject): The agent being evaluated, with MCP tool capabilities
+- **Jupyter MCP Server**: Provides code execution tools to the White Agent
 - **Launcher**: One-command execution script for easy setup and evaluation
-
-The Data Agent Benchmark (DABench) is designed to measure and push the state-of-the-art in Data Analysis by LLMs.
 
 ## Features
 
 - ✅ **A2A Protocol Compatible**: Full compatibility with Agent-to-Agent standard using [Pydantic FastA2A](https://github.com/pydantic/fasta2a)
-- ✅ **[AgentBeats](https://rdi.berkeley.edu/agentx-agentbeats) Architecture**: Proper green/white agent separation
+- ✅ **AgentBeats Architecture**: Proper green/white agent separation as per [AgentBeats](https://rdi.berkeley.edu/agentx-agentbeats) guidelines
 - ✅ **DABench Scoring**: [DABench](https://github.com/InfiAgent/InfiAgent/tree/main/examples/DA-Agent/data) benchmark dataset 
 - ✅ **PydanticA AI Agent and Evaluation**: Utilizes [Pydantic AI](https://ai.pydantic.dev/evals/evaluators/llm-judge/) for agent and evaluation
 - ✅ **MCP Tools Integration**: White agent supports [jupyter-mcp-server](https://github.com/datalayer/jupyter-mcp-server) tools
@@ -163,6 +164,9 @@ headers = {"Authorization": f"Bearer {self.jupyter_token}"}
 - **Tools List**: `http://localhost:8888/mcp/tools/list`
 - **Tool Execution**: `http://localhost:8888/mcp/tools/call`
 
-### Data Context Files
+## Data Context Files & DABench Tasks
 
-The White Agent has access to DABench data files in `agent-workings/data/`.
+The evaluation process involves two data components:
+
+- **Data Files**: 68 diverse CSV datasets in `agent-workings/data/` available for the White Agent to analyze through the Jupyter MCP Server
+- **Task Distribution**: Green Agent sends tasks one-by-one from the 257 DABench evaluation tasks stored in `data-dabench/`
