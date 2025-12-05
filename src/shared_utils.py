@@ -110,115 +110,79 @@ def setup_llm_client(agent_type=None):
         print(f"⚠️  LLM setup error: {e}")
         return None, model_name
 
-def get_pydantic_ai_model(agent_type=None) -> OpenAISchema:
+def get_pydantic_ai_model(agent_type=None) -> str:
     """
     Get the correct model name format for Pydantic AI based on environment configuration.
-    Returns the model name in the format expected by Pydantic AI.
+    Expects model names in Pydantic AI format: provider:model_name
     
     Args:
         agent_type (str, optional): Either 'green', 'white', or None for default behavior
     """
     # Get model configuration from environment - agent-specific or fallback to general
     if agent_type == 'green':
-        model_name = os.getenv("GREEN_AGENT_MODEL")
+        model_name = os.getenv("GREEN_AGENT_MODEL", "openai:gpt-4o")
     elif agent_type == 'white':
-        model_name = os.getenv("WHITE_AGENT_MODEL")
+        model_name = os.getenv("WHITE_AGENT_MODEL", "openai:gpt-4o")
+    else:
+        model_name = os.getenv("GREEN_AGENT_MODEL", "openai:gpt-4o")
     
     api_key = os.getenv("LLM_API_KEY")
-    azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
     
     if not api_key:
         print("⚠️  No LLM_API_KEY found")
-        return f"openai:{model_name}"
+        return model_name
     
-    # Check if using Azure OpenAI
-    if azure_endpoint:
-        print(f"🔑 Detected Azure OpenAI configuration")
+    # Parse provider and model from format: provider:model_name
+    if ":" not in model_name:
+        print(f"⚠️  Invalid model format: {model_name}. Expected format: provider:model_name")
+        print("   Examples: openai:gpt-4o, azure:gpt-4, anthropic:claude-3-sonnet")
+        return f"openai:{model_name}"  # Fallback to OpenAI
+    
+    provider, model = model_name.split(":", 1)
+    
+    if provider == "azure":
+        print(f"🔑 Using Azure OpenAI model: {model_name}")
+        azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+        
+        if not azure_endpoint:
+            print("⚠️  AZURE_OPENAI_ENDPOINT not set for Azure model")
+            return model_name
         
         # Set up environment variables for Azure
         if "/openai/deployments/" in azure_endpoint:
             base_url = azure_endpoint.split("/openai/deployments/")[0]
-            deployment_name = azure_endpoint.split("/openai/deployments/")[1].split("/")[0]
         else:
             base_url = azure_endpoint.rstrip("/")
-            deployment_name = model_name.replace("azure/", "") if model_name.startswith("azure/") else model_name
         
         os.environ["AZURE_OPENAI_API_KEY"] = api_key
         os.environ["AZURE_OPENAI_ENDPOINT"] = base_url
         api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-08-01-preview")
         os.environ["AZURE_OPENAI_API_VERSION"] = api_version
-        # Pydantic AI expects OPENAI_API_VERSION for Azure
         os.environ["OPENAI_API_VERSION"] = api_version
         
-        # Pydantic AI Azure format: azure:deployment_name
-        pydantic_model = f"azure:{deployment_name}"
-        print(f"🔑 Using Azure OpenAI model for Pydantic AI: {pydantic_model}")
         print(f"🔑 Base URL: {base_url}")
-        print(f"🔑 Deployment: {deployment_name}")
+        print(f"🔑 Deployment: {model}")
         
-        return pydantic_model
-    
-    # Check if using Anthropic Claude models
-    elif any(claude_model in model_name.lower() for claude_model in ["claude", "sonnet", "haiku", "opus"]):
-        print(f"🔑 Detected Anthropic Claude configuration")
+    elif provider == "anthropic":
+        print(f"🔑 Using Anthropic model: {model_name}")
         os.environ["ANTHROPIC_API_KEY"] = api_key
         
-        # Pydantic AI Anthropic format: anthropic:model_name
-        pydantic_model = f"anthropic:{model_name}"
-        print(f"🔑 Using Anthropic model for Pydantic AI: {pydantic_model}")
-        
-        return pydantic_model
-    
-    # Check if using Google Gemini models
-    elif "gemini" in model_name.lower():
-        print(f"🔑 Detected Google Gemini configuration")
+    elif provider == "gemini":
+        print(f"🔑 Using Google Gemini model: {model_name}")
         os.environ["GOOGLE_API_KEY"] = api_key
         
-        # Pydantic AI Gemini format: gemini:model_name
-        pydantic_model = f"gemini:{model_name}"
-        print(f"🔑 Using Google Gemini model for Pydantic AI: {pydantic_model}")
-        
-        return pydantic_model
-    
-    # Check if using Groq models
-    elif any(groq_model in model_name.lower() for groq_model in ["llama", "mixtral", "groq"]):
-        print(f"🔑 Detected Groq configuration")
+    elif provider == "groq":
+        print(f"🔑 Using Groq model: {model_name}")
         os.environ["GROQ_API_KEY"] = api_key
         
-        # Pydantic AI Groq format: groq:model_name
-        pydantic_model = f"groq:{model_name}"
-        print(f"🔑 Using Groq model for Pydantic AI: {pydantic_model}")
-        
-        return pydantic_model
-    
-    # Check if already has azure/ prefix (LiteLLM format)
-    elif model_name.startswith("azure/"):
-        print(f"🔑 Detected LiteLLM Azure format in model name")
-        deployment_name = model_name.replace("azure/", "")
-        
-        # Still need to set up Azure environment
-        if not azure_endpoint:
-            print("⚠️  AZURE_OPENAI_ENDPOINT not set for azure/ model format")
-        else:
-            # Set up environment variables for Azure
-            if "/openai/deployments/" in azure_endpoint:
-                base_url = azure_endpoint.split("/openai/deployments/")[0]
-            else:
-                base_url = azure_endpoint.rstrip("/")
-            
-            os.environ["AZURE_OPENAI_ENDPOINT"] = base_url
-            api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-08-01-preview")
-            os.environ["AZURE_OPENAI_API_VERSION"] = api_version
-            os.environ["OPENAI_API_VERSION"] = api_version
-        
-        os.environ["AZURE_OPENAI_API_KEY"] = api_key
-        pydantic_model = f"azure:{deployment_name}"
-        print(f"🔑 Using Azure OpenAI model for Pydantic AI: {pydantic_model}")
-        
-        return pydantic_model
-    
-    else:
-        # Standard OpenAI (default)
-        print(f"🔑 Using standard OpenAI model: openai:{model_name}")
+    elif provider == "openai":
+        print(f"🔑 Using OpenAI model: {model_name}")
         os.environ["OPENAI_API_KEY"] = api_key
-        return f"openai:{model_name}"
+        
+    else:
+        print(f"⚠️  Unknown provider: {provider}. Supported: openai, azure, anthropic, gemini, groq")
+        print("   Falling back to OpenAI format")
+        os.environ["OPENAI_API_KEY"] = api_key
+        return f"openai:{model}"
+    
+    return model_name

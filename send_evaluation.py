@@ -69,8 +69,7 @@ async def send_evaluation_request(green_url="http://localhost:8000", white_url="
             client = A2AClient(base_url=green_url, http_client=http_client)
             response = await client.send_message(message)
             print("✅ Evaluation request sent successfully!")
-            print(f"📬 Response: {response}")
-            
+                        
             if monitor:
                 print("🔍 Monitoring evaluation progress... (Press Ctrl+C to stop)")
                 
@@ -80,7 +79,7 @@ async def send_evaluation_request(green_url="http://localhost:8000", white_url="
                     print("📝 Real-time status checking every 30 seconds")
                     
                     # Monitor with proper task status checking
-                    max_monitor_time = 3600  # 60 minutes max monitoring 
+                    max_monitor_time = 5400  # 90 minutes max monitoring 
                     check_interval = 30      # Check every 30 seconds
                     elapsed_time = 0
                     
@@ -102,6 +101,7 @@ async def send_evaluation_request(green_url="http://localhost:8000", white_url="
                                     if task_status == 'completed':
                                         print("🎉 Evaluation completed successfully!")
                                         print("📊 Check results/ directory for evaluation report")
+                                        print(f"📋 Task response: {task_data}")
                                         return True
                                     elif task_status == 'failed':
                                         print(f"❌ Evaluation failed")

@@ -9,12 +9,10 @@ This agent:
 5. Demonstrates A2A-compatible agent capabilities with proper MCP integration
 """
 
-import json
 import uuid
-import asyncio
 import os
 import sys
-from typing import Any, Dict, List, Optional
+from typing import Any, List
 from contextlib import asynccontextmanager
 
 from fasta2a import FastA2A, Skill, Worker
@@ -26,6 +24,10 @@ from fasta2a.schema import Artifact, Message, TaskIdParams, TaskSendParams, Text
 from pydantic_ai import Agent
 from pydantic_ai.mcp import MCPServerStreamableHTTP
 
+# MCP client imports for direct tool calls
+from mcp import ClientSession
+from mcp.client.streamable_http import streamablehttp_client
+
 from dotenv import load_dotenv
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 dotenv_path = os.path.join(project_root, '.env')
@@ -35,11 +37,11 @@ print(f"🔧 White Agent loaded environment variables from {dotenv_path}")
 
 # Import shared utilities
 try:
-    from ..shared_utils import setup_llm_client, get_pydantic_ai_model, setup_logger
+    from ..shared_utils import get_pydantic_ai_model, setup_logger
 except ImportError:
     # Fallback for when running as script
     sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-    from shared_utils import setup_llm_client, get_pydantic_ai_model, setup_logger
+    from shared_utils import get_pydantic_ai_model, setup_logger
 
 # Setup logger
 logger = setup_logger("white_agent")
@@ -58,7 +60,9 @@ class WhiteWorker(Worker[Context]):
         self.base_url = base_url
         self.mcp_url = f"{base_url}/mcp"
         self.agent = None
+        self.mcp_server = None
         self._agent_setup_complete = False
+        self._initial_files = set()  # Track files at task start
         logger.info("✅ WhiteWorker initialized")
     
     async def _setup_agent(self):
@@ -82,6 +86,9 @@ class WhiteWorker(Worker[Context]):
                 headers=headers
             )
             
+            # Store the MCP server for direct tool calls
+            self.mcp_server = mcp_server
+            
             logger.info(f"✅ MCP server connection created")
             
             # Get the correct Pydantic AI model configuration
@@ -97,9 +104,9 @@ class WhiteWorker(Worker[Context]):
                 system_prompt="""You are an AI data analyst with access to MCP tools for data analysis. All your data files are in the ./data directory, do not bother checking the filesystem.
 
 Your workflow should be:
-1. Connect to notebook.ipynb to perform the following steps
-2. Load and examine relevant datasets using execute_code
-3. Perform analysis step by step with execute_code
+1. Connect to notebook.ipynb using use_notebook tool with mode="connect" 
+2. Load and examine relevant datasets using execute_code or insert_execute_code_cell
+3. Perform analysis step by step with execute_code or by inserting and executing cells
 4. Provide a concise final answer based on your analysis
 """)
             logger.info("✅ Pydantic AI MCP agent setup complete")
@@ -110,6 +117,183 @@ Your workflow should be:
             import traceback
             logger.error(traceback.format_exc())
             self.agent = None
+    
+    async def _call_mcp_tool(self, tool_name: str, arguments: dict):
+        """Call MCP tool using proper streamable HTTP client."""
+        try:
+            async with streamablehttp_client(self.mcp_url) as (read_stream, write_stream, _):
+                async with ClientSession(read_stream, write_stream) as session:
+                    await session.initialize()
+                    result = await session.call_tool(tool_name, arguments)
+                    return result
+        except Exception as e:
+            logger.error(f"❌ MCP tool call failed for {tool_name}: {e}")
+            raise
+
+    async def _clear_notebook_for_task(self):
+        """Clear the notebook and restart kernel after each task."""
+        try:
+            logger.info("🧹 Clearing notebook for fresh task...")
+            
+            # Connect to the notebook
+            result = await self._call_mcp_tool("use_notebook", {
+                "notebook_name": "notebook",
+                "notebook_path": "notebook.ipynb", 
+                "mode": "connect"
+            })
+            logger.info(f"Connected to notebook: {result}")
+            
+            # Read current cells
+            notebook_content = await self._call_mcp_tool("read_notebook", {
+                "notebook_name": "notebook",
+                "response_format": "brief"
+            })
+            
+            # Extract cell indices from the response
+            cell_indices = []
+            if notebook_content and hasattr(notebook_content, 'content') and notebook_content.content:
+                lines = str(notebook_content.content[0].text).split('\n')
+                for line in lines:
+                    if line.strip() and not line.startswith('Index') and not line.startswith('Name'):
+                        try:
+                            # Parse TSV format - first column should be index
+                            parts = line.split('\t')
+                            if parts and len(parts) > 0 and parts[0].strip().isdigit():
+                                cell_indices.append(int(parts[0].strip()))
+                        except:
+                            continue
+                
+                # Delete all cells in descending order to avoid index shifting
+                if cell_indices:
+                    cell_indices.sort(reverse=True)
+                    logger.info(f"🗑️ Deleting {len(cell_indices)} cells: {cell_indices}")
+                    
+                    await self._call_mcp_tool("delete_cell", {
+                        "cell_indices": cell_indices,
+                        "include_source": False
+                    })
+            
+            # Restart the kernel to clear memory
+            await self._call_mcp_tool("restart_notebook", {
+                "notebook_name": "notebook"
+            })
+            
+            logger.info("✅ Notebook cleared and kernel restarted")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to clear notebook: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            # Continue anyway - the AI can still work
+    
+    async def _capture_initial_files(self):
+        """Capture the list of files at the start of a task."""
+        try:
+            logger.info("📁 Capturing initial file state...")
+            
+            # Get list of all files with deeper scan and no pagination limit
+            files_response = await self._call_mcp_tool("list_files", {
+                "path": "",
+                "max_depth": 3,  # Increase depth to catch more files
+                "limit": 0  # No pagination limit - get ALL files
+            })
+            
+            if files_response and hasattr(files_response, 'content') and files_response.content:
+                # Parse the response to extract file paths
+                lines = str(files_response.content[0].text).split('\n')
+                logger.info(f"🔍 Processing {len(lines)} lines from file list")
+                
+                for line in lines:
+                    # Skip header lines like "Path", "Showing X-Y of Z files", empty lines
+                    if line.strip() and not line.startswith('Path') and not line.startswith('Showing') and '\t' in line:
+                        try:
+                            parts = line.split('\t')
+                            if len(parts) >= 2:
+                                file_path = parts[0].strip()
+                                file_type = parts[1].strip()
+                                
+                                # Only track files, not directories
+                                if file_type == 'file':
+                                    self._initial_files.add(file_path)
+                                    
+                                # Log for debugging
+                                if file_path.startswith('data/'):
+                                    logger.debug(f"📄 Found data file: {file_path} (type: {file_type})")
+                        except Exception as e:
+                            logger.debug(f"❌ Error parsing line '{line}': {e}")
+                            continue
+            
+            logger.info(f"📋 Captured {len(self._initial_files)} initial files")
+            
+            # Count data files specifically for debugging
+            data_files = [f for f in self._initial_files if f.startswith('data/')]
+            logger.info(f"📊 Found {len(data_files)} files in data directory")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to capture initial files: {e}")
+            # Continue anyway - this is just for cleanup
+    
+    async def _cleanup_new_files(self):
+        """Remove any files created during the task using execute_code with shell commands."""
+        try:
+            logger.info("🗂️ Checking for new files to cleanup...")
+            
+            # Get current list of files with same depth and no pagination limit
+            files_response = await self._call_mcp_tool("list_files", {
+                "path": "",
+                "max_depth": 3,  # Same depth as initial capture
+                "limit": 0  # No pagination limit - get ALL files
+            })
+            
+            current_files = set()
+            if files_response and hasattr(files_response, 'content') and files_response.content:
+                lines = str(files_response.content[0].text).split('\n')
+                for line in lines:
+                    # Skip header lines like "Path", "Showing X-Y of Z files", empty lines
+                    if line.strip() and not line.startswith('Path') and not line.startswith('Showing') and '\t' in line:
+                        try:
+                            parts = line.split('\t')
+                            if len(parts) >= 2:
+                                file_path = parts[0].strip()
+                                file_type = parts[1].strip()
+                                
+                                # Only track files, not directories
+                                if file_type == 'file':
+                                    current_files.add(file_path)
+                        except:
+                            continue
+            
+            logger.info(f"📊 Current files: {len(current_files)}, Initial files: {len(self._initial_files)}")
+            
+            # Find new files (present now but not at start)
+            new_files = current_files - self._initial_files
+            
+            if new_files:
+                logger.info(f"🗑️ Found {len(new_files)} new files to cleanup: {list(new_files)}")
+                
+                # Delete new files using execute_code with shell commands
+                for file_path in new_files:
+                    # Skip certain files we shouldn't delete
+                    if file_path in ['notebook.ipynb'] or file_path.startswith('.') or file_path.startswith('data/'):
+                        logger.info(f"⏭️ Skipping protected file: {file_path}")
+                        continue
+                        
+                    try:
+                        logger.info(f"🗑️ Deleting file: {file_path}")
+                        # Use execute_code to run shell command
+                        await self._call_mcp_tool("execute_code", {
+                            "code": f"!rm -f '{file_path}'",
+                            "timeout": 10
+                        })
+                        logger.info(f"✅ Deleted file: {file_path}")
+                    except Exception as e:
+                        logger.error(f"❌ Failed to delete {file_path}: {e}")
+            else:
+                logger.info("✅ No new files to cleanup")
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to cleanup new files: {e}")
+            # Continue anyway - this is just for cleanup
     
     async def run_task(self, params: TaskSendParams) -> None:
         """Process a task and provide a response."""
@@ -138,6 +322,9 @@ Your workflow should be:
                 logger.info("🔧 Setting up agent in async context...")
                 await self._setup_agent()
                 self._agent_setup_complete = True
+            
+            # Capture initial file state for cleanup
+            await self._capture_initial_files()
             
             # Process question using Pydantic AI with MCP tools
             if not self.agent:
@@ -179,6 +366,10 @@ Your workflow should be:
             )
             logger.info(f"✅ Task {task['id']} completed successfully")
             
+            # Clean notebook and files after successful completion
+            await self._clear_notebook_for_task()
+            await self._cleanup_new_files()
+            
         except Exception as e:
             logger.error(f"❌ Task processing failed: {e}")
             import traceback
@@ -199,6 +390,10 @@ Your workflow should be:
                 state='failed',
                 new_messages=[error_message]
             )
+            
+            # Clean notebook and files after error as well
+            await self._clear_notebook_for_task()
+            await self._cleanup_new_files()
 
     async def cancel_task(self, params: TaskIdParams) -> None:
         """Cancel a task."""

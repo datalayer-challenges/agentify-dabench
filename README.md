@@ -24,20 +24,36 @@ The Data Agent Benchmark (DABench) is designed to measure and push the state-of-
 
 ## Quick Start
 
-### Installation
+### Configuration
+
+The system uses environment variables for configuration. Copy `.env.template` to `.env` and configure:
 
 ```bash
-# Install dependencies
-pip install -r requirements.txt
+# LLM Configuration - Pydantic AI supports multiple providers
+LLM_API_KEY=your_api_key_here
 
-# Copy and configure environment
-cp .env.example .env
-# Edit .env with your API keys and model preferences
+# Model Configuration (specify provider explicitly using Pydantic AI format)
+GREEN_AGENT_MODEL=openai:gpt-4o             # OpenAI format: openai:model_name
+WHITE_AGENT_MODEL=openai:gpt-4o             # OpenAI format: openai:model_name
+
+# Alternative provider examples:
+# GREEN_AGENT_MODEL=azure:gpt-4             # Azure OpenAI (requires endpoint below)
+# GREEN_AGENT_MODEL=anthropic:claude-3-sonnet # Anthropic Claude
+# GREEN_AGENT_MODEL=gemini:gemini-pro       # Google Gemini
+# GREEN_AGENT_MODEL=groq:llama3-70b         # Groq
+
+# Azure OpenAI Configuration (when using azure: models)
+AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
+AZURE_OPENAI_API_VERSION=2024-06-01
 ```
 
 ### Option 1: All-in-One Launcher Script
 
 ```bash
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
 # Start both green and white agents
 python launcher.py
 
@@ -53,6 +69,10 @@ python launcher.py --evaluate --quick-sample 3
 For better control and monitoring, use the 4-terminal workflow:
 
 ```bash
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
 # Terminal 1: Start MCP Server
 make start-mcp
 
@@ -74,7 +94,11 @@ For containerized development, use the Docker workflow:
 ```bash
 # Build all Docker images (run this first or after code changes)
 make docker-build-all
+```
 
+#### macOS/Windows Docker Workflow
+
+```bash
 # Start services in separate terminals:
 # Terminal 1: Start Jupyter MCP Server
 make docker-start-jupyter
@@ -87,41 +111,37 @@ make docker-start-green
 
 # Terminal 4: Run Evaluation (on Docker containers)
 make docker-run-eval-quick-monitor     # Quick 3-task evaluation with monitoring
-make docker-run-eval-monitor           # Full dataset evaluation with monitoring  
+make docker-run-eval-monitor           # Full dataset evaluation with monitoring
 ```
 
-#### Platform-Specific Docker Configuration
-
-**macOS/Windows**: The Docker configuration uses `host.docker.internal` for container-to-host communication (default setup).
-
-**Linux**: Linux Docker doesn't support `host.docker.internal`. Add `--network=host` to these Makefile commands:
-- Line ~270: `docker-start-jupyter` command - add `--network=host \` after `@$(DOCKER_RUN) --rm -it \`
-- Line ~278: `docker-start-white` command - add `--network=host \` after `@$(DOCKER_RUN) --rm -it \`  
-- Line ~287: `docker-start-green` command - add `--network=host \` after `@$(DOCKER_RUN) --rm -it \`
-
-## Configuration
-
-### Environment Variables
-
-The system uses environment variables for configuration. Copy `.env.example` to `.env` and configure:
+#### Linux Docker Workflow
 
 ```bash
-# Agent Settings
+# Start services in separate terminals:
+# Terminal 1: Start Jupyter MCP Server
+make docker-start-jupyter-linux
 
-# LLM Configuration (LiteLLM supports 100+ providers)
-LLM_API_KEY=your_api_key_here
-GREEN_AGENT_MODEL=gpt-3.5-turbo     # Any LiteLLM-supported model
-WHITE_AGENT_MODEL=gpt-4             # Any LiteLLM-supported model
+# Terminal 2: Start White Agent (Test Subject)
+make docker-start-white-linux
 
-# For Azure OpenAI (additional config)
-AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
-AZURE_OPENAI_API_VERSION=2024-02-15-preview
+# Terminal 3: Start Green Agent (Evaluator)
+make docker-start-green-linux
+
+# Terminal 4: Run Evaluation (on Docker containers)
+make docker-run-eval-quick-monitor-linux     # Quick 3-task evaluation with monitoring
+make docker-run-eval-monitor-linux           # Full dataset evaluation with monitoring
 ```
+
+### Evaluation Results
+
+After evaluation, Pydantic AI generates a detailed report in the `results/` directory, including:
+- Overall scores and metrics
+- Task-by-task performance breakdown
+- Green Agent reason for scores
 
 ## Jupyter MCP Server Integration
 
 The White Agent is integrated with [**Jupyter MCP (Model Context Protocol) Server**](https://github.com/datalayer/jupyter-mcp-server) for enhanced data analysis and code execution capabilities. This integration provides the agent with powerful computational tools for autonomous problem-solving.
-
 
 ### Authentication & Security
 
