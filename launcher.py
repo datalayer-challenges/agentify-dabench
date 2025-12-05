@@ -2,13 +2,13 @@
 """
 AgentBeats Launcher
 
-This script launches both the green agent (evaluator) and white agent (test subject)
+This script launches both the green agent (evaluator) and purple agent (test subject)
 and provides a simple interface to run evaluations.
 
 Usage:
     python launcher.py                    # Start both agents
     python launcher.py --green-only       # Start only green agent
-    python launcher.py --white-only       # Start only white agent
+    python launcher.py --purple-only       # Start only purple agent
     python launcher.py --evaluate         # Start agents and run evaluation
 """
 
@@ -48,15 +48,15 @@ class Launcher:
     
     def __init__(self, log_dir: Path):
         self.green_process: Optional[subprocess.Popen] = None
-        self.white_process: Optional[subprocess.Popen] = None
+        self.purple_process: Optional[subprocess.Popen] = None
         self.jupyter_process: Optional[subprocess.Popen] = None
         self.green_port = 8000
-        self.white_port = 8001
+        self.purple_port = 8001
         self.jupyter_port = 8888  # Standard Jupyter port
         self.jupyter_token: Optional[str] = None
         self.log_dir = log_dir
         self.green_log_handle: Optional[Any] = None
-        self.white_log_handle: Optional[Any] = None
+        self.purple_log_handle: Optional[Any] = None
     
     def start_green_agent(self) -> bool:
         """Start the green agent (evaluator)."""
@@ -98,44 +98,44 @@ class Launcher:
             print(f"❌ Error starting green agent: {e}")
             return False
     
-    def start_white_agent(self) -> bool:
-        """Start the white agent (test subject)."""
+    def start_purple_agent(self) -> bool:
+        """Start the purple agent (test subject)."""
         try:
-            print("⚪ Starting White Agent (Test Subject)...")
+            print("🟣 Starting Purple Agent (Test Subject)...")
             
-            white_dir = project_root / "src" / "white_agent"
-            if not white_dir.exists():
-                print(f"❌ White agent directory not found: {white_dir}")
+            purple_dir = project_root / "src" / "purple_agent"
+            if not purple_dir.exists():
+                print(f"❌ Purple agent directory not found: {purple_dir}")
                 return False
             
             # Log to a file inside the timestamped log directory
-            white_log_path = self.log_dir / "white_agent.log"
-            print(f"📝 White agent logs will be written to: {white_log_path}")
-            self.white_log_handle = open(white_log_path, "w")
+            purple_log_path = self.log_dir / "purple_agent.log"
+            print(f"📝 Purple agent logs will be written to: {purple_log_path}")
+            self.purple_log_handle = open(purple_log_path, "w")
 
-            self.white_process = subprocess.Popen(
+            self.purple_process = subprocess.Popen(
                 [sys.executable, "agent.py"],
-                cwd=white_dir,
-                stdout=self.white_log_handle,
-                stderr=self.white_log_handle
+                cwd=purple_dir,
+                stdout=self.purple_log_handle,
+                stderr=self.purple_log_handle
             )
             
             # Wait for startup
             await_time = 5
-            print(f"\n⏳ Waiting {await_time}s for white agent startup...")
+            print(f"\n⏳ Waiting {await_time}s for purple agent startup...")
             time.sleep(await_time)
             
             # Check if process is still running
-            if self.white_process.poll() is None:
-                print(f"✅ White agent started on port {self.white_port}")
+            if self.purple_process.poll() is None:
+                print(f"✅ Purple agent started on port {self.purple_port}")
                 print("─" * 50)
                 return True
             else:
-                print(f"❌ White agent failed to start (process exited)")
+                print(f"❌ Purple agent failed to start (process exited)")
                 return False
                 
         except Exception as e:
-            print(f"❌ Error starting white agent: {e}")
+            print(f"❌ Error starting purple agent: {e}")
             return False
 
     def start_jupyter_mcp(self) -> bool:
@@ -189,7 +189,7 @@ class Launcher:
         try:
             import requests
             
-            # Store token for white agent to use
+            # Store token for purple agent to use
             os.environ["JUPYTER_TOKEN"] = jupyter_token
             
             # Wait a moment for extension to fully initialize
@@ -261,19 +261,19 @@ class Launcher:
             except subprocess.TimeoutExpired:
                 self.green_process.kill()
         
-        if self.white_process and self.white_process.poll() is None:
-            print("⚪ Stopping white agent...")
-            self.white_process.terminate()
+        if self.purple_process and self.purple_process.poll() is None:
+            print("🟣 Stopping purple agent...")
+            self.purple_process.terminate()
             try:
-                self.white_process.wait(timeout=5)
+                self.purple_process.wait(timeout=5)
             except subprocess.TimeoutExpired:
-                self.white_process.kill()
+                self.purple_process.kill()
 
         # Close log file handles
         if self.green_log_handle:
             self.green_log_handle.close()
-        if self.white_log_handle:
-            self.white_log_handle.close()
+        if self.purple_log_handle:
+            self.purple_log_handle.close()
     
     async def check_agent_health(self, url: str, name: str) -> bool:
         """Check if agent is healthy and responding."""
@@ -322,12 +322,12 @@ class Launcher:
             
             # Check agent health
             green_url = f"http://localhost:{self.green_port}"
-            white_url = f"http://localhost:{self.white_port}"
+            purple_url = f"http://localhost:{self.purple_port}"
             
             green_healthy = await self.check_agent_health(green_url, "Green Agent")
-            white_healthy = await self.check_agent_health(white_url, "White Agent")
+            purple_healthy = await self.check_agent_health(purple_url, "Purple Agent")
             
-            if not (green_healthy and white_healthy):
+            if not (green_healthy and purple_healthy):
                 print("❌ Agents are not healthy, cannot run evaluation")
                 return False
             
@@ -364,7 +364,7 @@ class Launcher:
             
             # Create evaluation request
             eval_request = {
-                "white_agent_url": white_url,
+                "purple_agent_url": purple_url,
                 "tasks": sample_tasks
             }
             
@@ -373,7 +373,7 @@ class Launcher:
                 role='user',
                 parts=[
                     TextPart(
-                        text="Please evaluate the white agent using the provided tasks.",
+                        text="Please evaluate the purple agent using the provided tasks.",
                         kind='text'
                     ),
                     DataPart(data=eval_request, kind='data')
@@ -548,10 +548,10 @@ class Launcher:
     async def _check_status(self):
         """Check status of both agents."""
         green_url = f"http://localhost:{self.green_port}"
-        white_url = f"http://localhost:{self.white_port}"
+        purple_url = f"http://localhost:{self.purple_port}"
         
         await self.check_agent_health(green_url, "Green Agent")
-        await self.check_agent_health(white_url, "White Agent")
+        await self.check_agent_health(purple_url, "Purple Agent")
 
 
 def main():
@@ -569,7 +569,7 @@ Examples:
     )
     
     parser.add_argument("--green-only", action="store_true", help="Start only green agent")
-    parser.add_argument("--white-only", action="store_true", help="Start only white agent")
+    parser.add_argument("--purple-only", action="store_true", help="Start only purple agent")
     parser.add_argument("--evaluate", action="store_true", help="Start agents and run evaluation")
     parser.add_argument("--interactive", action="store_true", help="Run in interactive mode")
     
@@ -607,15 +607,15 @@ Examples:
         
         success = True
         
-        if args.white_only:
-            # Start JupyterLab for MCP tools when starting white agent
-            success = launcher.start_jupyter_mcp() and launcher.start_white_agent()
+        if args.purple_only:
+            # Start JupyterLab for MCP tools when starting purple agent
+            success = launcher.start_jupyter_mcp() and launcher.start_purple_agent()
         elif args.green_only:
             success = launcher.start_green_agent()
         else:
             # Start JupyterLab MCP server, then both agents
             success = (launcher.start_jupyter_mcp() and 
-                      launcher.start_white_agent() and 
+                      launcher.start_purple_agent() and 
                       launcher.start_green_agent())
         
         if not success:
@@ -647,7 +647,7 @@ Examples:
             print("\n✅ All services started successfully!")
             print(f"📊 JupyterLab MCP: http://localhost:{launcher.jupyter_port}")
             print(f"🟢 Green Agent: http://localhost:{launcher.green_port}")
-            print(f"⚪ White Agent: http://localhost:{launcher.white_port}")
+            print(f"🟣 Purple Agent: http://localhost:{launcher.purple_port}")
             print("\nPress Ctrl+C to stop all services")
             
             # Keep running until interrupted

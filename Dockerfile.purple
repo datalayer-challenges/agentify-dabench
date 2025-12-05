@@ -1,4 +1,4 @@
-# Dockerfile for White Agent (Test Subject)
+# Dockerfile for Purple Agent (Test Subject)
 FROM python:3.11-slim
 
 # Install system dependencies
@@ -16,8 +16,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy only necessary files for White Agent
-COPY src/white_agent/ ./src/white_agent/
+# Copy only necessary files for Purple Agent
+COPY src/purple_agent/ ./src/purple_agent/
 COPY src/shared_utils.py ./src/shared_utils.py
 COPY src/__init__.py ./src/__init__.py
 
@@ -26,14 +26,14 @@ RUN mkdir -p logs results
 
 # Set environment variables
 ENV PYTHONPATH=/app:/app/src
-ENV WHITE_PORT=8001
+ENV PURPLE_PORT=8001
 
-# Expose white agent port
+# Expose purple agent port
 EXPOSE 8001
 
-# Health check for white agent
+# Health check for purple agent
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8001/.well-known/agent-card.json || exit 1
 
-# Default command for white agent
-CMD ["python", "src/white_agent/agent.py"]
+# Default command for purple agent
+CMD ["python", "src/purple_agent/agent.py"]

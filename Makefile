@@ -1,11 +1,11 @@
-.PHONY: help start-mcp start-white start-green run-eval-monitor run-eval-quick-monitor docker-build-all docker-start-jupyter docker-start-white docker-start-green docker-run-eval-monitor docker-run-eval-quick-monitor docker-start-jupyter-linux docker-start-white-linux docker-start-green-linux docker-run-eval-monitor-linux docker-run-eval-quick-monitor-linux
+.PHONY: help start-mcp start-purple start-green run-eval-monitor run-eval-quick-monitor docker-build-all docker-start-jupyter docker-start-purple docker-start-green docker-run-eval-monitor docker-run-eval-quick-monitor docker-start-jupyter-linux docker-start-purple-linux docker-start-green-linux docker-run-eval-monitor-linux docker-run-eval-quick-monitor-linux
 
 # Default Python executable
 PYTHON := python
 
 # Directories
 PROJECT_ROOT := $(shell pwd)
-WHITE_DIR := src/white_agent
+PURPLE_DIR := src/purple_agent
 GREEN_DIR := src/green_agent
 AGENT_WORKINGS_DIR := agent-workings
 LOGS_DIR := logs
@@ -13,7 +13,7 @@ LOGS_DIR := logs
 # Ports (matching launcher.py)
 JUPYTER_PORT := 8888
 GREEN_PORT := 8000
-WHITE_PORT := 8001
+PURPLE_PORT := 8001
 
 # Log directory with timestamp
 LOG_DIR := $(LOGS_DIR)/run_$(shell date +%Y%m%d_%H%M%S)
@@ -53,13 +53,13 @@ start-mcp: ## Start JupyterLab MCP server (foreground - keeps terminal busy)
 		--IdentityProvider.token=$${JUPYTER_TOKEN} \
 	| tee ../$(LOG_DIR)/jupyter_mcp.log
 
-start-white: ## Start white agent (foreground - keeps terminal busy)
-	@echo "$(BLUE)⚪ Starting White Agent (Test Subject)...$(RESET)"
+start-purple: ## Start purple agent (foreground - keeps terminal busy)
+	@echo "$(BLUE)🟣 Starting Purple Agent (Test Subject)...$(RESET)"
 	@mkdir -p $(LOG_DIR)
-	@echo "$(CYAN)🔗 White agent endpoint: http://localhost:$(WHITE_PORT)$(RESET)"
-	@echo "$(YELLOW)🚀 Starting White Agent... (Press Ctrl+C to stop)$(RESET)"
+	@echo "$(CYAN)🔗 Purple agent endpoint: http://localhost:$(PURPLE_PORT)$(RESET)"
+	@echo "$(YELLOW)🚀 Starting Purple Agent... (Press Ctrl+C to stop)$(RESET)"
 	@echo "$(BLUE)────────────────────────────────────────$(RESET)"
-	@cd $(WHITE_DIR) && $(PYTHON) agent.py | tee ../../$(LOG_DIR)/white_agent.log
+	@cd $(PURPLE_DIR) && $(PYTHON) agent.py | tee ../../$(LOG_DIR)/purple_agent.log
 
 start-green: ## Start green agent (foreground - keeps terminal busy)
 	@echo "$(BLUE)🟢 Starting Green Agent (Evaluator)...$(RESET)"
@@ -87,7 +87,7 @@ DOCKER_RUN := docker run
 docker-build-all: ## Build all Docker images
 	@echo "$(BLUE)🐳 Building all Docker images...$(RESET)"
 	@$(DOCKER_BUILD) -f Dockerfile.jupyter -t agentbeats-jupyter:latest .
-	@$(DOCKER_BUILD) -f Dockerfile.white -t agentbeats-white:latest .
+	@$(DOCKER_BUILD) -f Dockerfile.purple -t agentbeats-purple:latest .
 	@$(DOCKER_BUILD) -f Dockerfile.green -t agentbeats-green:latest .
 	@echo "$(GREEN)✅ All Docker images built successfully$(RESET)"
 
@@ -105,16 +105,16 @@ docker-start-jupyter: ## Start Jupyter MCP in foreground (macOS - keeps terminal
 		-v $(PWD)/logs:/app/logs \
 		agentbeats-jupyter:latest
 
-docker-start-white: ## Start White Agent in foreground (macOS - keeps terminal busy)
+docker-start-purple: ## Start Purple Agent in foreground (macOS - keeps terminal busy)
 	@if [ ! -f .env ]; then echo "$(RED)❌ .env file not found$(RESET)"; exit 1; fi
-	@echo "$(BLUE)🐳 Starting White Agent in Docker (macOS)...$(RESET)"
+	@echo "$(BLUE)🐳 Starting Purple Agent in Docker (macOS)...$(RESET)"
 	@$(DOCKER_RUN) --rm -it \
 		--env-file .env \
 		-e JUPYTER_BASE_URL=http://host.docker.internal:8888 \
 		-p 8001:8001 \
 		-v $(PWD)/logs:/app/logs \
 		-v $(PWD)/results:/app/results \
-		agentbeats-white:latest
+		agentbeats-purple:latest
 
 docker-start-green: ## Start Green Agent in foreground (macOS - keeps terminal busy)
 	@if [ ! -f .env ]; then echo "$(RED)❌ .env file not found$(RESET)"; exit 1; fi
@@ -129,11 +129,11 @@ docker-start-green: ## Start Green Agent in foreground (macOS - keeps terminal b
 
 docker-run-eval-monitor: ## Send evaluation request to Docker containers with monitoring (macOS)
 	@echo "$(BLUE)🐳🔍 Sending full evaluation to Docker containers with monitoring (macOS)...$(RESET)"
-	@$(PYTHON) send_evaluation.py --tasks 0 --monitor --green-url http://localhost:8000 --white-url http://host.docker.internal:8001
+	@$(PYTHON) send_evaluation.py --tasks 0 --monitor --green-url http://localhost:8000 --purple-url http://host.docker.internal:8001
 
 docker-run-eval-quick-monitor: ## Send quick evaluation request to Docker containers with monitoring (macOS)
 	@echo "$(BLUE)🐳⚡ Sending quick evaluation to Docker containers with monitoring (macOS)...$(RESET)"
-	@$(PYTHON) send_evaluation.py --tasks 3 --monitor --green-url http://localhost:8000 --white-url http://host.docker.internal:8001
+	@$(PYTHON) send_evaluation.py --tasks 3 --monitor --green-url http://localhost:8000 --purple-url http://host.docker.internal:8001
 
 # ============================================================================
 # Linux Docker Commands (use --network=host)
@@ -149,16 +149,16 @@ docker-start-jupyter-linux: ## Start Jupyter MCP in foreground (Linux - keeps te
 		-v $(PWD)/logs:/app/logs \
 		agentbeats-jupyter:latest
 
-docker-start-white-linux: ## Start White Agent in foreground (Linux - keeps terminal busy)
+docker-start-purple-linux: ## Start Purple Agent in foreground (Linux - keeps terminal busy)
 	@if [ ! -f .env ]; then echo "$(RED)❌ .env file not found$(RESET)"; exit 1; fi
-	@echo "$(BLUE)🐳 Starting White Agent in Docker (Linux)...$(RESET)"
+	@echo "$(BLUE)🐳 Starting Purple Agent in Docker (Linux)...$(RESET)"
 	@$(DOCKER_RUN) --rm -it \
 		--env-file .env \
 		-e JUPYTER_BASE_URL=http://localhost:8888 \
 		--network=host \
 		-v $(PWD)/logs:/app/logs \
 		-v $(PWD)/results:/app/results \
-		agentbeats-white:latest
+		agentbeats-purple:latest
 
 docker-start-green-linux: ## Start Green Agent in foreground (Linux - keeps terminal busy)
 	@if [ ! -f .env ]; then echo "$(RED)❌ .env file not found$(RESET)"; exit 1; fi
@@ -173,8 +173,8 @@ docker-start-green-linux: ## Start Green Agent in foreground (Linux - keeps term
 
 docker-run-eval-monitor-linux: ## Send evaluation request to Docker containers with monitoring (Linux)
 	@echo "$(BLUE)🐳🔍 Sending full evaluation to Docker containers with monitoring (Linux)...$(RESET)"
-	@$(PYTHON) send_evaluation.py --tasks 0 --monitor --green-url http://localhost:8000 --white-url http://localhost:8001
+	@$(PYTHON) send_evaluation.py --tasks 0 --monitor --green-url http://localhost:8000 --purple-url http://localhost:8001
 
 docker-run-eval-quick-monitor-linux: ## Send quick evaluation request to Docker containers with monitoring (Linux)
 	@echo "$(BLUE)🐳⚡ Sending quick evaluation to Docker containers with monitoring (Linux)...$(RESET)"
-	@$(PYTHON) send_evaluation.py --tasks 3 --monitor --green-url http://localhost:8000 --white-url http://localhost:8001
+	@$(PYTHON) send_evaluation.py --tasks 3 --monitor --green-url http://localhost:8000 --purple-url http://localhost:8001

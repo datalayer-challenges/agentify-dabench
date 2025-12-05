@@ -1,6 +1,6 @@
 # DABench AgentBeats Implementation
 
-A complete A2A (Agent-to-Agent) compatible implementation of the [DABench](https://github.com/InfiAgent/InfiAgent/tree/main/examples/DA-Agent/data) benchmark, following the [AgentBeats](https://rdi.berkeley.edu/agentx-agentbeats) methodology with Green Agent (evaluator) and White Agent (test subject) architecture.
+A complete A2A (Agent-to-Agent) compatible implementation of the [DABench](https://github.com/InfiAgent/InfiAgent/tree/main/examples/DA-Agent/data) benchmark, following the [AgentBeats](https://rdi.berkeley.edu/agentx-agentbeats) methodology with Green Agent (evaluator) and Purple Agent (test subject) architecture.
 
 The Data Agent Benchmark (DABench) is designed to measure and push the state-of-the-art in **Data Analysis tasks** for AI agents.
 
@@ -11,17 +11,17 @@ The Data Agent Benchmark (DABench) is designed to measure and push the state-of-
 This project implements the [DABench](https://github.com/InfiAgent/InfiAgent/tree/main/examples/DA-Agent/data) benchmark as an A2A-compatible evaluation system where:
 
 - **Green Agent** (Evaluator): Manages DABench assessments and evaluates other agents
-- **White Agent** (Test Subject): The agent being evaluated, with MCP tool capabilities
-- **Jupyter MCP Server**: Provides code execution tools to the White Agent
+- **Purple Agent** (Test Subject): The agent being evaluated, with MCP tool capabilities
+- **Jupyter MCP Server**: Provides code execution tools to the Purple Agent
 - **Launcher**: One-command execution script for easy setup and evaluation
 
 ## Features
 
 - ✅ **A2A Protocol Compatible**: Full compatibility with Agent-to-Agent standard using [Pydantic FastA2A](https://github.com/pydantic/fasta2a)
-- ✅ **AgentBeats Architecture**: Proper green/white agent separation as per [AgentBeats](https://rdi.berkeley.edu/agentx-agentbeats) guidelines
+- ✅ **AgentBeats Architecture**: Proper green/purple agent separation as per [AgentBeats](https://rdi.berkeley.edu/agentx-agentbeats) guidelines
 - ✅ **DABench Scoring**: [DABench](https://github.com/InfiAgent/InfiAgent/tree/main/examples/DA-Agent/data) benchmark dataset 
 - ✅ **PydanticA AI Agent and Evaluation**: Utilizes [Pydantic AI](https://ai.pydantic.dev/evals/evaluators/llm-judge/) for agent and evaluation
-- ✅ **MCP Tools Integration**: White agent supports [jupyter-mcp-server](https://github.com/datalayer/jupyter-mcp-server) tools
+- ✅ **MCP Tools Integration**: Purple agent supports [jupyter-mcp-server](https://github.com/datalayer/jupyter-mcp-server) tools
 
 ## Quick Start
 
@@ -35,7 +35,7 @@ LLM_API_KEY=your_api_key_here
 
 # Model Configuration (specify provider explicitly using Pydantic AI format)
 GREEN_AGENT_MODEL=openai:gpt-4o             # OpenAI format: openai:model_name
-WHITE_AGENT_MODEL=openai:gpt-4o             # OpenAI format: openai:model_name
+PURPLE_AGENT_MODEL=openai:gpt-4o             # OpenAI format: openai:model_name
 
 # Alternative provider examples:
 # GREEN_AGENT_MODEL=azure:gpt-4             # Azure OpenAI (requires endpoint below)
@@ -55,7 +55,7 @@ AZURE_OPENAI_API_VERSION=2024-06-01
 # Install dependencies
 pip install -r requirements.txt
 
-# Start both green and white agents
+# Start both green and purple agents
 python launcher.py
 
 # Full dataset evaluation
@@ -77,8 +77,8 @@ pip install -r requirements.txt
 # Terminal 1: Start MCP Server
 make start-mcp
 
-# Terminal 2: Start White Agent (Test Subject)  
-make start-white
+# Terminal 2: Start Purple Agent (Test Subject)  
+make start-purple
 
 # Terminal 3: Start Green Agent (Evaluator)
 make start-green
@@ -104,8 +104,8 @@ make docker-build-all
 # Terminal 1: Start Jupyter MCP Server
 make docker-start-jupyter
 
-# Terminal 2: Start White Agent (Test Subject)
-make docker-start-white
+# Terminal 2: Start Purple Agent (Test Subject)
+make docker-start-purple
 
 # Terminal 3: Start Green Agent (Evaluator)
 make docker-start-green
@@ -122,8 +122,8 @@ make docker-run-eval-monitor           # Full dataset evaluation with monitoring
 # Terminal 1: Start Jupyter MCP Server
 make docker-start-jupyter-linux
 
-# Terminal 2: Start White Agent (Test Subject)
-make docker-start-white-linux
+# Terminal 2: Start Purple Agent (Test Subject)
+make docker-start-purple-linux
 
 # Terminal 3: Start Green Agent (Evaluator)
 make docker-start-green-linux
@@ -142,7 +142,7 @@ After evaluation, Pydantic AI generates a detailed report in the `results/` dire
 
 ## Jupyter MCP Server Integration
 
-The White Agent is integrated with [**Jupyter MCP (Model Context Protocol) Server**](https://github.com/datalayer/jupyter-mcp-server) for enhanced data analysis and code execution capabilities. This integration provides the agent with powerful computational tools for autonomous problem-solving.
+The Purple Agent is integrated with [**Jupyter MCP (Model Context Protocol) Server**](https://github.com/datalayer/jupyter-mcp-server) for enhanced data analysis and code execution capabilities. This integration provides the agent with powerful computational tools for autonomous problem-solving.
 
 ### Authentication & Security
 
@@ -150,7 +150,7 @@ The White Agent is integrated with [**Jupyter MCP (Model Context Protocol) Serve
 The MCP server uses Bearer token authentication for security:
 
 ```python
-# White Agent automatically uses token from environment
+# Purple Agent automatically uses token from environment
 headers = {"Authorization": f"Bearer {self.jupyter_token}"}
 
 # Automatic fallback to no-auth if token fails
@@ -168,5 +168,5 @@ headers = {"Authorization": f"Bearer {self.jupyter_token}"}
 
 The evaluation process involves two data components:
 
-- **Data Files**: 68 diverse CSV datasets in `agent-workings/data/` available for the White Agent to analyze through the Jupyter MCP Server
+- **Data Files**: 68 diverse CSV datasets in `agent-workings/data/` available for the Purple Agent to analyze through the Jupyter MCP Server
 - **Task Distribution**: Green Agent sends tasks one-by-one from the 257 DABench evaluation tasks stored in `data-dabench/`

@@ -1,5 +1,5 @@
 """
-White Agent - Fully Autonomous Agent with Pydantic AI MCP tool capabilities.
+Purple Agent - Fully Autonomous Agent with Pydantic AI MCP tool capabilities.
 
 This agent:
 1. Receives evaluation tasks from the green agent
@@ -32,7 +32,7 @@ from dotenv import load_dotenv
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 dotenv_path = os.path.join(project_root, '.env')
 load_dotenv(dotenv_path)
-print(f"🔧 White Agent loaded environment variables from {dotenv_path}")
+print(f"🔧 Purple Agent loaded environment variables from {dotenv_path}")
 
 
 # Import shared utilities
@@ -44,17 +44,17 @@ except ImportError:
     from shared_utils import get_pydantic_ai_model, setup_logger
 
 # Setup logger
-logger = setup_logger("white_agent")
+logger = setup_logger("purple_agent")
 
-# Context type for the white agent
+# Context type for the purple agent
 Context = List[Message]
 
 
-class WhiteWorker(Worker[Context]):
-    """White agent worker - fully autonomous with AI-driven decision making using Pydantic AI MCP."""
+class PurpleWorker(Worker[Context]):
+    """Purple agent worker - fully autonomous with AI-driven decision making using Pydantic AI MCP."""
     
     def __init__(self, broker, storage, jupyter_token=None, base_url="http://localhost:8888"):
-        logger.info("🏗️  Initializing WhiteWorker with Pydantic AI MCP")
+        logger.info("🏗️  Initializing PurpleWorker with Pydantic AI MCP")
         super().__init__(storage=storage, broker=broker)
         self.jupyter_token = jupyter_token or os.getenv("JUPYTER_TOKEN")
         self.base_url = base_url
@@ -63,7 +63,7 @@ class WhiteWorker(Worker[Context]):
         self.mcp_server = None
         self._agent_setup_complete = False
         self._initial_files = set()  # Track files at task start
-        logger.info("✅ WhiteWorker initialized")
+        logger.info("✅ PurpleWorker initialized")
     
     async def _setup_agent(self):
         """Setup the Pydantic AI agent with MCP tools in async context."""
@@ -93,7 +93,7 @@ class WhiteWorker(Worker[Context]):
             
             # Get the correct Pydantic AI model configuration
             logger.info(f"🤖 Setting up Pydantic AI model...")
-            pydantic_model = get_pydantic_ai_model('white')
+            pydantic_model = get_pydantic_ai_model('purple')
             logger.info(f"✅ Pydantic AI model setup complete with model: {pydantic_model}")
             
             # Create Pydantic AI agent with MCP tools
@@ -292,7 +292,7 @@ Your workflow should be:
     
     async def run_task(self, params: TaskSendParams) -> None:
         """Process a task and provide a response."""
-        logger.info(f"⚪ White Agent run_task called with params: {params}")
+        logger.info(f"🟣 Purple Agent run_task called with params: {params}")
         
         task = await self.storage.load_task(params['id'])
         if task is None:
@@ -463,8 +463,8 @@ Your workflow should be:
         return ' '.join(text_parts)
 
 
-def create_white_agent() -> FastA2A:
-    """Create the white agent with MCP tool capabilities."""
+def create_purple_agent() -> FastA2A:
+    """Create the purple agent with MCP tool capabilities."""
     
     # Initialize storage and broker
     storage = InMemoryStorage[Context]()
@@ -510,10 +510,10 @@ def create_white_agent() -> FastA2A:
     # Create worker with Pydantic AI MCP
     jupyter_token = os.getenv("JUPYTER_TOKEN")
     jupyter_base_url = os.getenv("JUPYTER_BASE_URL", "http://localhost:8888")
-    logger.info(f"🔑 White Agent token: {jupyter_token[:8] + '...' if jupyter_token else 'None'}")
+    logger.info(f"🔑 Purple Agent token: {jupyter_token[:8] + '...' if jupyter_token else 'None'}")
     logger.info(f"🌐 Jupyter MCP base URL: {jupyter_base_url}")
     
-    worker = WhiteWorker(
+    worker = PurpleWorker(
         broker=broker, 
         storage=storage, 
         jupyter_token=jupyter_token,
@@ -531,7 +531,7 @@ def create_white_agent() -> FastA2A:
     app = FastA2A(
         storage=storage,
         broker=broker,
-        name="White Agent - Autonomous",
+        name="Purple Agent - Autonomous",
         description="Fully autonomous A2A-compatible agent with AI-driven decision making and MCP tool capabilities",
         url="http://localhost:8001",
         version="2.0.0",
@@ -544,17 +544,17 @@ def create_white_agent() -> FastA2A:
 
 
 def main():
-    """Main entry point for the autonomous white agent."""
+    """Main entry point for the autonomous purple agent."""
     import uvicorn
     
-    logger.info("⚪ Starting White Agent - Fully Autonomous")
+    logger.info("🟣 Starting Purple Agent - Fully Autonomous")
     logger.info("🤖 AI-Driven: Pure autonomous decision making")
     logger.info("🛠️  MCP Tools: Dynamic tool discovery and usage")
     logger.info("📋 Agent Card: http://localhost:8001/.well-known/agent-card.json")
     logger.info("🔗 A2A Endpoint: http://localhost:8001/")
     
     uvicorn.run(
-        "agent:create_white_agent",
+        "agent:create_purple_agent",
         factory=True,
         host="0.0.0.0",
         port=8001,

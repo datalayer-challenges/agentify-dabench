@@ -3,7 +3,7 @@ Green Agent - A2A-compatible evaluator agent using Pydantic Eval.
 
 This agent:
 1. Receives evaluation requests containing tasks and target agent URL
-2. Sends tasks to the white agent (agent under test)
+2. Sends tasks to the purple agent (agent under test)
 3. Evaluates responses using pydantic-evals with LLM as judge
 4. Returns pydantic eval report as results
 """
@@ -156,12 +156,12 @@ class GreenWorker(Worker[Context]):
         for part in message['parts']:
             if part['kind'] == 'data':
                 data = part.get('data', {})
-                if 'white_agent_url' in data and 'tasks' in data:
+                if 'purple_agent_url' in data and 'tasks' in data:
                     return data
             elif part['kind'] == 'text':
                 try:
                     data = json.loads(part['text'])
-                    if 'white_agent_url' in data and 'tasks' in data:
+                    if 'purple_agent_url' in data and 'tasks' in data:
                         return data
                 except (json.JSONDecodeError, ValueError):
                     continue
@@ -180,7 +180,7 @@ class GreenWorker(Worker[Context]):
         if any(greeting in user_text for greeting in ['hello', 'hi', 'hey', 'greetings']):
             response_text = "Hello! I'm the Green Agent, an evaluator that can assess other AI agents using benchmark tasks with Pydantic Eval. How can I help you today?"
         elif 'test' in user_text or 'check' in user_text:
-            response_text = "I'm working properly! I can evaluate A2A agents using benchmark tasks with Pydantic Eval and LLM as judge. Send me an evaluation request with a white agent URL and tasks to get started."
+            response_text = "I'm working properly! I can evaluate A2A agents using benchmark tasks with Pydantic Eval and LLM as judge. Send me an evaluation request with a purple agent URL and tasks to get started."
         elif any(word in user_text for word in ['help', 'what', 'how', 'explain']):
             response_text = """I'm the Green Agent! Here's what I can do:
 
@@ -190,7 +190,7 @@ class GreenWorker(Worker[Context]):
 🔍 **Framework**: Built on pydantic-evals for robust evaluation pipelines
 
 To run an evaluation, send me a message with:
-- `white_agent_url`: URL of the agent to test
+- `purple_agent_url`: URL of the agent to test
 - `tasks`: Array of tasks with questions and correct answers
 
 Example: "Please evaluate the agent at http://localhost:8001 using these tasks: [...]"
@@ -207,16 +207,16 @@ Example: "Please evaluate the agent at http://localhost:8001 using these tasks: 
 
     async def _evaluate_agent_pydantic(self, eval_request: dict) -> dict:
         """Evaluate an agent using Pydantic Eval framework."""
-        white_agent_url = eval_request['white_agent_url']
+        purple_agent_url = eval_request['purple_agent_url']
         tasks = eval_request['tasks']
         
         # Clear completed tasks from previous evaluations
         self.completed_tasks.clear()
         
-        logger.info(f"🤖 Starting Pydantic Eval assessment of agent at {white_agent_url}")
+        logger.info(f"🤖 Starting Pydantic Eval assessment of agent at {purple_agent_url}")
         logger.info(f"📝 Evaluating {len(tasks)} tasks")
         
-        # Create timeout configuration for white agent communication
+        # Create timeout configuration for purple agent communication
         import httpx
         timeout = httpx.Timeout(
             connect=30.0,   # Connection timeout: 30 seconds
@@ -225,9 +225,9 @@ Example: "Please evaluate the agent at http://localhost:8001 using these tasks: 
             pool=None       # No pool timeout - create fresh connections
         )
         
-        # Create evaluation function that calls the white agent
-        async def evaluate_white_agent(task_input: dict) -> str:
-            """Function that sends tasks to the white agent and returns the response."""
+        # Create evaluation function that calls the purple agent
+        async def evaluate_purple_agent(task_input: dict) -> str:
+            """Function that sends tasks to the purple agent and returns the response."""
             http_client = None  # Initialize to None
             try:
                 # The task_input is already a dictionary, no need to load it from a string.
@@ -237,7 +237,7 @@ Example: "Please evaluate the agent at http://localhost:8001 using these tasks: 
                 format_info = task_data['format']
                 file_name = task_data['file_name']
                 
-                # Create task prompt for white agent using DABench format
+                # Create task prompt for purple agent using DABench format
                 task_prompt = f"""You are an expert data analyst and you will answer the question using the tools at your disposal.
 
 Here is the question you need to answer:
@@ -250,9 +250,9 @@ Here is the question you need to answer:
                 # Create ONE HTTP client for this task (completely isolated)
                 limits = httpx.Limits(max_keepalive_connections=0, max_connections=1)
                 http_client = httpx.AsyncClient(timeout=timeout, limits=limits)
-                client = A2AClient(base_url=white_agent_url, http_client=http_client)
+                client = A2AClient(base_url=purple_agent_url, http_client=http_client)
                 
-                # Create task message for white agent
+                # Create task message for purple agent
                 task_message = Message(
                     role='user',
                     parts=[TextPart(
@@ -262,9 +262,9 @@ Here is the question you need to answer:
                     kind='message',
                     message_id=str(uuid.uuid4())
                 )
-                logger.info(f"   📤 Sending task to white agent: {question[:50]}{'...' if len(question) > 50 else ''}")
+                logger.info(f"   📤 Sending task to purple agent: {question[:50]}{'...' if len(question) > 50 else ''}")
                 
-                # Send task to white agent
+                # Send task to purple agent
                 try:
                     response = await client.send_message(task_message)
                 except httpx.ReadTimeout as e:
@@ -284,7 +284,7 @@ Here is the question you need to answer:
                     poll_interval = 10   # Check every 10 seconds
                     elapsed_time = 0
                     
-                    logger.info(f"   ⏳ Waiting for white agent to complete task...")
+                    logger.info(f"   ⏳ Waiting for purple agent to complete task...")
                     
                     while elapsed_time < max_wait_time:
                         await asyncio.sleep(poll_interval)
@@ -300,10 +300,10 @@ Here is the question you need to answer:
                                 logger.info(f"   📊 Task status: {task_status} (elapsed: {elapsed_time}s)")
                                 
                                 if task_status == 'completed':
-                                    logger.info(f"   ✅ White agent completed task after {elapsed_time}s")
+                                    logger.info(f"   ✅ Purple agent completed task after {elapsed_time}s")
                                     break
                                 elif task_status == 'failed':
-                                    logger.warning(f"   ❌ White agent task failed after {elapsed_time}s")
+                                    logger.warning(f"   ❌ Purple agent task failed after {elapsed_time}s")
                                     return f"[Task failed: {task_status}]"
                                 elif task_status in ['working', 'submitted']:
                                     continue  # Keep waiting
@@ -311,18 +311,18 @@ Here is the question you need to answer:
                                     logger.warning(f"   ⚠️ Unknown task status: {task_status}")
                                     break
                             else:
-                                logger.error(f"   ❌ Failed to get white agent task status: {task_response}")
+                                logger.error(f"   ❌ Failed to get purple agent task status: {task_response}")
                                 return "[Failed to get task status]"
                         except httpx.ReadTimeout as e:
                             logger.warning(f"   ⏰ Status check timeout after {timeout.read}s (elapsed: {elapsed_time}s)")
-                            logger.info(f"   💭 White agent may be overloaded - continuing to wait...")
+                            logger.info(f"   💭 Purple agent may be overloaded - continuing to wait...")
                             continue  # Keep trying
                         except Exception as e:
-                            logger.warning(f"   ⚠️ Error checking white agent status: {e}")
+                            logger.warning(f"   ⚠️ Error checking purple agent status: {e}")
                             continue
                     
                     if elapsed_time >= max_wait_time:
-                        logger.warning(f"   ⏰ White agent task timed out after {max_wait_time}s")
+                        logger.warning(f"   ⏰ Purple agent task timed out after {max_wait_time}s")
                         return "[Task timed out]"
                     
                     # Get final task result and extract answer
@@ -342,24 +342,24 @@ Here is the question you need to answer:
                         agent_answer = self._extract_agent_answer(final_task)
                         
                         if agent_answer:
-                            logger.info(f"   💬 White agent answered: '{agent_answer[:100]}{'...' if len(agent_answer) > 100 else ''}'")
+                            logger.info(f"   💬 Purple agent answered: '{agent_answer[:100]}{'...' if len(agent_answer) > 100 else ''}'")
                             return agent_answer
                         else:
-                            logger.warning(f"   ⚠️ Could not extract answer from white agent response")
+                            logger.warning(f"   ⚠️ Could not extract answer from purple agent response")
                             logger.warning(f"   🔍 Final task structure: {list(final_task.keys()) if isinstance(final_task, dict) else type(final_task)}")
                             return "[No answer extracted]"
                     else:
                         error = task_response.get('error', 'Unknown error')
-                        logger.error(f"   ❌ White agent task failed: {error}")
+                        logger.error(f"   ❌ Purple agent task failed: {error}")
                         return f"[Task failed: {error}]"
                 else:
                     error = response.get('error', 'Unknown error')
-                    logger.error(f"   ❌ Failed to send message to white agent: {error}")
+                    logger.error(f"   ❌ Failed to send message to purple agent: {error}")
                     logger.error(f"   🔍 Full response: {response}")
                     return f"[Message send failed: {error}]"
                         
             except Exception as e:
-                logger.error(f"   ❌ Exception during white agent evaluation: {e}")
+                logger.error(f"   ❌ Exception during purple agent evaluation: {e}")
                 logger.error(f"   🔍 Exception type: {type(e).__name__}")
                 import traceback
                 logger.error(f"   📍 Full traceback: {traceback.format_exc()}")
@@ -409,10 +409,10 @@ Here is the question you need to answer:
         
         logger.info(f"🔍 Running Pydantic Eval with {len(cases)} cases and {len(evaluators)} evaluators...")
         
-        # Run evaluation with limited concurrency to avoid overwhelming the white agent
+        # Run evaluation with limited concurrency to avoid overwhelming the purple agent
         start_time = time.time()
         try:
-            report = await dataset.evaluate(evaluate_white_agent, max_concurrency=1)
+            report = await dataset.evaluate(evaluate_purple_agent, max_concurrency=1)
             evaluation_time = time.time() - start_time
             
             logger.info(f"✅ Pydantic Eval completed in {evaluation_time:.2f} seconds")
@@ -452,14 +452,14 @@ Here is the question you need to answer:
             
             # Get model names for both agents
             green_model = os.getenv("GREEN_AGENT_MODEL")
-            white_model = os.getenv("WHITE_AGENT_MODEL")
+            purple_model = os.getenv("PURPLE_AGENT_MODEL")
             
             # Clean model names for filename (replace special characters)
             green_model_clean = green_model.replace(":", "_").replace("-", "_")
-            white_model_clean = white_model.replace(":", "_").replace("-", "_")
+            purple_model_clean = purple_model.replace(":", "_").replace("-", "_")
             
             # Create filename with timestamp, model names, and case count
-            filename = f"pydantic_eval_report_{timestamp}_{green_model_clean}_vs_{white_model_clean}_{total_cases}cases.json"
+            filename = f"pydantic_eval_report_{timestamp}_{green_model_clean}_vs_{purple_model_clean}_{total_cases}cases.json"
             filepath = os.path.join(results_dir, filename)
             
             # Extract structured data from EvaluationReport using the proper API
@@ -773,7 +773,7 @@ def create_green_agent() -> FastA2A:
     # Create worker
     worker = GreenWorker(broker=broker, storage=storage)
     
-    # Add lifespan to start worker (same pattern as white agent)
+    # Add lifespan to start worker (same pattern as purple agent)
     @asynccontextmanager
     async def lifespan(app):
         logger.info("🚀 Starting Green Agent worker...")

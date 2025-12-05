@@ -53,17 +53,20 @@ def setup_logger(name: str, log_dir: str = "logs"):
 
 def setup_llm_client(agent_type=None):
     """
-    Setup LLM client using LiteLLM for both Green and White agents.
+    Setup LLM client using LiteLLM for both Green and Purple agents.
     Returns (llm_client, model_name).
     
     Args:
-        agent_type (str, optional): Either 'green', 'white', or None for default behavior
+        agent_type (str, optional): Either 'green', 'purple', or None for default behavior
     """
     # Get model configuration from environment - agent-specific or fallback to general
     if agent_type == 'green':
         model_name = os.getenv("GREEN_AGENT_MODEL")
-    elif agent_type == 'white':
-        model_name = os.getenv("WHITE_AGENT_MODEL")
+    elif agent_type == 'purple':
+        model_name = os.getenv("PURPLE_AGENT_MODEL")
+    else:
+        # Default behavior - try GREEN first, then PURPLE,
+        model_name = os.getenv("GREEN_AGENT_MODEL") or os.getenv("PURPLE_AGENT_MODEL")
     
     api_key = os.getenv("LLM_API_KEY")
     
@@ -116,13 +119,13 @@ def get_pydantic_ai_model(agent_type=None) -> str:
     Expects model names in Pydantic AI format: provider:model_name
     
     Args:
-        agent_type (str, optional): Either 'green', 'white', or None for default behavior
+        agent_type (str, optional): Either 'green', 'purple', or None for default behavior
     """
     # Get model configuration from environment - agent-specific or fallback to general
     if agent_type == 'green':
         model_name = os.getenv("GREEN_AGENT_MODEL", "openai:gpt-4o")
-    elif agent_type == 'white':
-        model_name = os.getenv("WHITE_AGENT_MODEL", "openai:gpt-4o")
+    elif agent_type == 'purple':
+        model_name = os.getenv("PURPLE_AGENT_MODEL") or "openai:gpt-4o" 
     else:
         model_name = os.getenv("GREEN_AGENT_MODEL", "openai:gpt-4o")
     

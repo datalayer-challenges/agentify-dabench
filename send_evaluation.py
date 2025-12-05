@@ -16,7 +16,7 @@ from fasta2a.client import A2AClient
 from fasta2a.schema import Message, TextPart, DataPart
 from src.data_loader import get_sample_tasks, load_dabench_tasks
 
-async def send_evaluation_request(green_url="http://localhost:8000", white_url="http://localhost:8001", num_tasks=3, monitor=False):
+async def send_evaluation_request(green_url="http://localhost:8000", purple_url="http://localhost:8001", num_tasks=3, monitor=False):
     """Send evaluation request to green agent."""
     try:
         if num_tasks == 0:
@@ -35,7 +35,7 @@ async def send_evaluation_request(green_url="http://localhost:8000", white_url="
         
         print(f"📦 Creating evaluation request...")
         eval_request = {
-            'white_agent_url': white_url,
+            'purple_agent_url': purple_url,
             'tasks': tasks
         }
         
@@ -43,7 +43,7 @@ async def send_evaluation_request(green_url="http://localhost:8000", white_url="
             role='user',
             parts=[
                 TextPart(
-                    text='Please evaluate the white agent using the provided tasks.',
+                    text='Please evaluate the purple agent using the provided tasks.',
                     kind='text'
                 ),
                 DataPart(
@@ -162,13 +162,13 @@ def main():
     
     parser = argparse.ArgumentParser(description='Send evaluation request to green agent')
     parser.add_argument('--green-url', default='http://localhost:8000', help='Green agent URL')
-    parser.add_argument('--white-url', default='http://localhost:8001', help='White agent URL')
+    parser.add_argument('--purple-url', default='http://localhost:8001', help='Purple agent URL')
     parser.add_argument('--tasks', type=int, default=3, help='Number of tasks to evaluate (0 = full dataset)')
     parser.add_argument('--monitor', action='store_true', help='Keep monitoring evaluation progress (keeps terminal busy)')
     
     args = parser.parse_args()
     
-    success = asyncio.run(send_evaluation_request(args.green_url, args.white_url, args.tasks, args.monitor))
+    success = asyncio.run(send_evaluation_request(args.green_url, args.purple_url, args.tasks, args.monitor))
     sys.exit(0 if success else 1)
 
 if __name__ == "__main__":
