@@ -16,44 +16,75 @@ from fasta2a.client import A2AClient
 from fasta2a.schema import Message, TextPart, DataPart
 from src.data_loader import get_sample_tasks, load_dabench_tasks
 
-async def send_evaluation_request(green_url="http://localhost:8000", purple_url="http://localhost:8001", num_tasks=3, monitor=False):
+async def send_evaluation_request(green_url="http://localhost:8000", purple_url="http://localhost:8001", num_tasks=3, monitor=False, use_agentbeats_format=False):
     """Send evaluation request to green agent."""
     try:
-        if num_tasks == 0:
-            print("🔍 Loading full DABench dataset...")
-            from src.data_loader import load_dabench_tasks
-            tasks = load_dabench_tasks()
-            print(f"📊 Loaded {len(tasks)} tasks from full DABench dataset")
+        if use_agentbeats_format:
+            print(f"🤖 Creating AgentBeats assessment request...")
+            # New AgentBeats format
+            assessment_request = {
+                'participants': {
+                    'data_analyst': purple_url
+                },
+                'config': {
+                    'num_tasks': num_tasks if num_tasks > 0 else 257,  # Use all tasks if num_tasks is 0
+                    'quick_sample': num_tasks <= 10,  # Quick sample for small numbers
+                    'dataset_path': 'data-dabench/'
+                }
+            }
+            
+            message = Message(
+                role='user',
+                parts=[
+                    TextPart(
+                        text='AgentBeats assessment request for DABench evaluation.',
+                        kind='text'
+                    ),
+                    DataPart(
+                        data=assessment_request,
+                        kind='data'
+                    )
+                ],
+                kind='message',
+                message_id='eval_request_001'
+            )
         else:
-            print(f"🔍 Loading {num_tasks} sample tasks...")
-            tasks = get_sample_tasks(num_tasks)
-            print(f"📊 Loaded {len(tasks)} sample tasks")
-        
-        if not tasks:
-            print("❌ No tasks loaded! Check data files.")
-            return False
-        
-        print(f"📦 Creating evaluation request...")
-        eval_request = {
-            'purple_agent_url': purple_url,
-            'tasks': tasks
-        }
-        
-        message = Message(
-            role='user',
-            parts=[
-                TextPart(
-                    text='Please evaluate the purple agent using the provided tasks.',
-                    kind='text'
-                ),
-                DataPart(
-                    data=eval_request,
-                    kind='data'
-                )
-            ],
-            kind='message',
-            message_id='eval_001'
-        )
+            # Legacy format for backward compatibility
+            if num_tasks == 0:
+                print("🔍 Loading full DABench dataset...")
+                from src.data_loader import load_dabench_tasks
+                tasks = load_dabench_tasks()
+                print(f"📊 Loaded {len(tasks)} tasks from full DABench dataset")
+            else:
+                print(f"🔍 Loading {num_tasks} sample tasks...")
+                tasks = get_sample_tasks(num_tasks)
+                print(f"📊 Loaded {len(tasks)} sample tasks")
+            
+            if not tasks:
+                print("❌ No tasks loaded! Check data files.")
+                return False
+            
+            print(f"📦 Creating evaluation request...")
+            eval_request = {
+                'purple_agent_url': purple_url,
+                'tasks': tasks
+            }
+            
+            message = Message(
+                role='user',
+                parts=[
+                    TextPart(
+                        text='Please evaluate the purple agent using the provided tasks.',
+                        kind='text'
+                    ),
+                    DataPart(
+                        data=eval_request,
+                        kind='data'
+                    )
+                ],
+                kind='message',
+                message_id='eval_001'
+            )
         
         print(f"📤 Sending evaluation request to green agent at {green_url}...")
         
@@ -165,10 +196,17 @@ def main():
     parser.add_argument('--purple-url', default='http://localhost:8001', help='Purple agent URL')
     parser.add_argument('--tasks', type=int, default=3, help='Number of tasks to evaluate (0 = full dataset)')
     parser.add_argument('--monitor', action='store_true', help='Keep monitoring evaluation progress (keeps terminal busy)')
+    parser.add_argument('--agentbeats', action='store_true', help='Use new AgentBeats format instead of legacy format')
     
     args = parser.parse_args()
     
-    success = asyncio.run(send_evaluation_request(args.green_url, args.purple_url, args.tasks, args.monitor))
+    success = asyncio.run(send_evaluation_request(
+        args.green_url, 
+        args.purple_url, 
+        args.tasks, 
+        args.monitor,
+        args.agentbeats
+    ))
     sys.exit(0 if success else 1)
 
 if __name__ == "__main__":

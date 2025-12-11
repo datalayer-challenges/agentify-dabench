@@ -315,7 +315,7 @@ class Launcher:
             print(f"❌ {name} curl health check error: {e}")
             return False
     
-    async def run_sample_evaluation(self, sample_mode: str = "quick", quick_sample_size: int = 3) -> bool:
+    async def run_sample_evaluation(self, sample_mode: str = "quick", quick_sample_size: int = 3, use_agentbeats_format: bool = False) -> bool:
         """Run an evaluation with real data."""
         try:
             print(f"\n🎯 Running Evaluation ({sample_mode} mode)...")
@@ -363,17 +363,33 @@ class Launcher:
                 sample_tasks = []
             
             # Create evaluation request
-            eval_request = {
-                "purple_agent_url": purple_url,
-                "tasks": sample_tasks
-            }
+            if use_agentbeats_format:
+                print(f"🤖 Creating AgentBeats assessment request...")
+                eval_request = {
+                    "participants": {
+                        "data_analyst": purple_url
+                    },
+                    "config": {
+                        "num_tasks": len(sample_tasks) if sample_tasks else quick_sample_size,
+                        "quick_sample": sample_mode == "quick",
+                        "dataset_path": "data-dabench/"
+                    }
+                }
+                message_text = "AgentBeats assessment request for DABench evaluation."
+            else:
+                print(f"📋 Creating legacy evaluation request...")
+                eval_request = {
+                    "purple_agent_url": purple_url,
+                    "tasks": sample_tasks
+                }
+                message_text = "Please evaluate the purple agent using the provided tasks."
             
             # Create message for green agent
             message = Message(
                 role='user',
                 parts=[
                     TextPart(
-                        text="Please evaluate the purple agent using the provided tasks.",
+                        text=message_text,
                         kind='text'
                     ),
                     DataPart(data=eval_request, kind='data')
@@ -506,8 +522,11 @@ class Launcher:
         print("\n🎮 Interactive Mode")
         print("Commands:")
         print("  eval [quick|dev|full] - Run evaluation (default: quick)")
+        print("  agentbeats - Toggle AgentBeats format (default: legacy)")
         print("  status - Check agent status")
         print("  quit - Exit")
+        
+        use_agentbeats_format = False  # Default to legacy format
         
         while True:
             try:
@@ -525,8 +544,13 @@ class Launcher:
                         continue
                     
                     sample_size = 3 if mode == "quick" else 10
-                    print(f"🚀 Running evaluation in {mode} mode...")
-                    asyncio.run(self.run_sample_evaluation(mode, sample_size))
+                    format_info = "AgentBeats" if use_agentbeats_format else "legacy"
+                    print(f"🚀 Running evaluation in {mode} mode with {format_info} format...")
+                    asyncio.run(self.run_sample_evaluation(mode, sample_size, use_agentbeats_format))
+                elif command == 'agentbeats':
+                    use_agentbeats_format = not use_agentbeats_format
+                    format_status = "AgentBeats" if use_agentbeats_format else "legacy"
+                    print(f"🔄 Message format switched to: {format_status}")
                 elif command == 'status':
                     asyncio.run(self._check_status())
                 elif command == 'help':
@@ -535,6 +559,7 @@ class Launcher:
                     print("    quick: 3 sample tasks (fast)")
                     print("    dev: 10 development tasks")
                     print("    full: 450 full dataset tasks")
+                    print(f"  agentbeats - Toggle format (current: {'AgentBeats' if use_agentbeats_format else 'legacy'})")
                     print("  status - Check agent health")
                     print("  quit - Exit")
                 else:
@@ -580,6 +605,8 @@ Examples:
                        help="Number of tasks for quick testing (default: 3)")
     parser.add_argument("--sample-mode", choices=["quick", "dev", "full"], default="quick",
                        help="Dataset mode: quick (3 DABench), dev (DABench), full (DABench)")
+    parser.add_argument("--agentbeats", action="store_true", 
+                       help="Use AgentBeats format for evaluation requests")
     
     args = parser.parse_args()
     
@@ -636,7 +663,7 @@ Examples:
             
             print(f"\n⏳ Running evaluation in 5 seconds (mode: {sample_mode})...")
             time.sleep(5)
-            eval_success = asyncio.run(launcher.run_sample_evaluation(sample_mode, args.quick_sample))
+            eval_success = asyncio.run(launcher.run_sample_evaluation(sample_mode, args.quick_sample, args.agentbeats))
             if eval_success:
                 print("\n✅ Evaluation completed successfully!")
             else:

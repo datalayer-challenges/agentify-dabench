@@ -152,20 +152,113 @@ class GreenWorker(Worker[Context]):
         return []
     
     def _extract_evaluation_request(self, message: Message) -> Optional[Dict[str, Any]]:
-        """Extract evaluation request from message."""
+        """Extract evaluation request from message - supports both legacy and AgentBeats formats."""
         for part in message['parts']:
             if part['kind'] == 'data':
                 data = part.get('data', {})
+                # Legacy format check
                 if 'purple_agent_url' in data and 'tasks' in data:
                     return data
+                # New AgentBeats format check
+                elif 'participants' in data and 'config' in data:
+                    return self._convert_agentbeats_request(data)
             elif part['kind'] == 'text':
                 try:
                     data = json.loads(part['text'])
+                    # Legacy format check
                     if 'purple_agent_url' in data and 'tasks' in data:
                         return data
+                    # New AgentBeats format check
+                    elif 'participants' in data and 'config' in data:
+                        return self._convert_agentbeats_request(data)
                 except (json.JSONDecodeError, ValueError):
                     continue
         return None
+
+    def _convert_agentbeats_request(self, agentbeats_data: dict) -> dict:
+        """Convert AgentBeats format to internal evaluation format."""
+        participants = agentbeats_data['participants']
+        config = agentbeats_data['config']
+        
+        # Extract purple agent URL (assumes single participant for DABench)
+        purple_agent_url = None
+        for role, url in participants.items():
+            purple_agent_url = url
+            break  # Take the first participant as the agent to evaluate
+        
+        if not purple_agent_url:
+            raise ValueError("No participants found in AgentBeats request")
+        
+        # Load tasks from dataset based on config
+        tasks = self._load_tasks_from_dataset(config)
+        
+        return {
+            'purple_agent_url': purple_agent_url,
+            'tasks': tasks,
+            'config': config  # Pass through config for potential future use
+        }
+
+    def _load_tasks_from_dataset(self, config: dict) -> List[dict]:
+        """Load DABench tasks from dataset based on configuration."""
+        dataset_path = config.get('dataset_path', 'data-dabench/')
+        num_tasks = config.get('num_tasks', 3)
+        quick_sample = config.get('quick_sample', True)
+        
+        logger.info(f"📂 Loading tasks from {dataset_path}")
+        logger.info(f"🔢 Requesting {num_tasks} tasks (quick_sample: {quick_sample})")
+        
+        # Load tasks from the DABench dataset
+        from ..data_loader import load_dabench_data
+        
+        try:
+            # Load the dataset
+            questions_file = f"{dataset_path}da-dev-questions.jsonl"
+            labels_file = f"{dataset_path}da-dev-labels.jsonl"
+            
+            dataset = load_dabench_data(questions_file, labels_file)
+            
+            # Sample tasks based on configuration
+            if quick_sample:
+                # Take first num_tasks for predictable testing
+                selected_tasks = dataset[:num_tasks]
+                logger.info(f"🎯 Selected first {len(selected_tasks)} tasks for quick sample")
+            else:
+                # Take all requested tasks or all available tasks
+                selected_tasks = dataset[:num_tasks] if num_tasks < len(dataset) else dataset
+                logger.info(f"🎯 Selected {len(selected_tasks)} tasks from dataset")
+            
+            # Convert to the expected format
+            converted_tasks = []
+            for task in selected_tasks:
+                converted_task = {
+                    'case_name': f"task_{task.get('id', len(converted_tasks))}",
+                    'question': task['question'],
+                    'constraints': task.get('constraints', ''),
+                    'format': task.get('format', ''),
+                    'file_name': task.get('file_name', ''),
+                    'expected_answer': task.get('answer', ''),
+                    'concepts': task.get('concepts', []),
+                    'level': task.get('level', 'medium')
+                }
+                converted_tasks.append(converted_task)
+            
+            logger.info(f"✅ Successfully loaded {len(converted_tasks)} tasks")
+            return converted_tasks
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to load tasks from dataset: {e}")
+            # Fallback to a minimal task set
+            logger.warning("🔄 Falling back to minimal task set")
+            return [{
+                'case_name': 'fallback_task',
+                'question': 'Calculate the mean of the first column in the dataset.',
+                'constraints': 'Use pandas to calculate the mean.',
+                'format': '@mean[value] where value is a number rounded to 2 decimal places',
+                'file_name': 'test_ave.csv',
+                'expected_answer': '@mean[31.72]',
+                'concepts': ['Summary Statistics'],
+                'level': 'easy'
+            }]
     
     async def _handle_simple_message(self, message: Message) -> Message:
         """Handle simple messages like greetings or basic questions."""
@@ -827,18 +920,31 @@ def create_green_agent() -> FastA2A:
 
 def main():
     """Main entry point for the green agent."""
+    import argparse
     import uvicorn
     
+    # Parse command line arguments for AgentBeats compatibility
+    parser = argparse.ArgumentParser(description="Green Agent (Evaluator)")
+    parser.add_argument("--host", default="0.0.0.0", help="Host address to bind to")
+    parser.add_argument("--port", type=int, default=8000, help="Port to listen on")
+    parser.add_argument("--card-url", help="URL to advertise in the agent card (optional)")
+    args = parser.parse_args()
+    
+    host = args.host
+    port = args.port
+    card_url = args.card_url or f"http://{host}:{port}"
+    
     logger.info("🟢 Starting Green Agent with Pydantic Eval...")
-    logger.info("📋 Agent Card: http://localhost:8000/.well-known/agent-card.json")
-    logger.info("🔗 A2A Endpoint: http://localhost:8000/")
+    logger.info(f"📋 Agent Card: {card_url}/.well-known/agent-card.json")
+    logger.info(f"🔗 A2A Endpoint: {card_url}/")
     logger.info("🎯 Evaluation Framework: Pydantic Eval with LLM as Judge")
+    logger.info(f"🌐 Binding to {host}:{port}")
     
     uvicorn.run(
         "agent:create_green_agent",
         factory=True,
-        host="0.0.0.0",
-        port=8000,
+        host=host,
+        port=port,
         log_level="info"
     )
 

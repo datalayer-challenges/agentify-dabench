@@ -1,4 +1,4 @@
-.PHONY: help start-mcp start-purple start-green run-eval-monitor run-eval-quick-monitor docker-build-all docker-start-jupyter docker-start-purple docker-start-green docker-run-eval-monitor docker-run-eval-quick-monitor docker-start-jupyter-linux docker-start-purple-linux docker-start-green-linux docker-run-eval-monitor-linux docker-run-eval-quick-monitor-linux
+.PHONY: help start-mcp start-purple start-green run-eval-monitor run-eval-quick-monitor docker-build-all docker-build-agentbeats docker-push-agentbeats docker-start-jupyter docker-start-purple docker-start-green docker-run-eval-monitor docker-run-eval-quick-monitor docker-start-jupyter-linux docker-start-purple-linux docker-start-green-linux docker-run-eval-monitor-linux docker-run-eval-quick-monitor-linux
 
 # Default Python executable
 PYTHON := python
@@ -90,6 +90,27 @@ docker-build-all: ## Build all Docker images
 	@$(DOCKER_BUILD) -f Dockerfile.purple -t agentbeats-purple:latest .
 	@$(DOCKER_BUILD) -f Dockerfile.green -t agentbeats-green:latest .
 	@echo "$(GREEN)✅ All Docker images built successfully$(RESET)"
+
+docker-build-agentbeats: ## Build Docker images for AgentBeats deployment (linux/amd64)
+	@echo "$(BLUE)🐳 Building AgentBeats-compatible Docker images (linux/amd64)...$(RESET)"
+	@echo "$(YELLOW)📦 Building Green Agent...$(RESET)"
+	@docker build --platform linux/amd64 -f Dockerfile.green -t ghcr.io/$(USER)/agentify-dab-step-green:latest .
+	@echo "$(YELLOW)📦 Building Purple Agent...$(RESET)"  
+	@docker build --platform linux/amd64 -f Dockerfile.purple -t ghcr.io/$(USER)/agentify-dab-step-purple:latest .
+	@echo "$(YELLOW)📦 Building Jupyter MCP Server...$(RESET)"
+	@docker build --platform linux/amd64 -f Dockerfile.jupyter -t ghcr.io/$(USER)/agentify-dab-step-jupyter:latest .
+	@echo "$(GREEN)✅ All AgentBeats-compatible images built successfully$(RESET)"
+	@echo "$(CYAN)🚀 Ready to push to GitHub Container Registry:$(RESET)"
+	@echo "  docker push ghcr.io/$(USER)/agentify-dab-step-green:latest"
+	@echo "  docker push ghcr.io/$(USER)/agentify-dab-step-purple:latest"  
+	@echo "  docker push ghcr.io/$(USER)/agentify-dab-step-jupyter:latest"
+
+docker-push-agentbeats: ## Push AgentBeats images to GitHub Container Registry
+	@echo "$(BLUE)🐳 Pushing AgentBeats images to GitHub Container Registry...$(RESET)"
+	@docker push ghcr.io/$(USER)/agentify-dab-step-green:latest
+	@docker push ghcr.io/$(USER)/agentify-dab-step-purple:latest
+	@docker push ghcr.io/$(USER)/agentify-dab-step-jupyter:latest
+	@echo "$(GREEN)✅ All images pushed successfully$(RESET)"
 
 # ============================================================================
 # macOS Docker Commands (default - use host.docker.internal)

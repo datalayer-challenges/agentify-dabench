@@ -35,5 +35,5 @@ EXPOSE 8001
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8001/.well-known/agent-card.json || exit 1
 
-# Default command for purple agent
-CMD ["python", "src/purple_agent/agent.py"]
+# Define ENTRYPOINT that accepts AgentBeats arguments
+ENTRYPOINT ["python", "src/purple_agent/agent.py"]

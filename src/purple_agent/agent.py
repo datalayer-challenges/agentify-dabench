@@ -545,19 +545,32 @@ def create_purple_agent() -> FastA2A:
 
 def main():
     """Main entry point for the autonomous purple agent."""
+    import argparse
     import uvicorn
+    
+    # Parse command line arguments for AgentBeats compatibility
+    parser = argparse.ArgumentParser(description="Purple Agent (Test Subject)")
+    parser.add_argument("--host", default="0.0.0.0", help="Host address to bind to")
+    parser.add_argument("--port", type=int, default=8001, help="Port to listen on")
+    parser.add_argument("--card-url", help="URL to advertise in the agent card (optional)")
+    args = parser.parse_args()
+    
+    host = args.host
+    port = args.port
+    card_url = args.card_url or f"http://{host}:{port}"
     
     logger.info("🟣 Starting Purple Agent - Fully Autonomous")
     logger.info("🤖 AI-Driven: Pure autonomous decision making")
     logger.info("🛠️  MCP Tools: Dynamic tool discovery and usage")
-    logger.info("📋 Agent Card: http://localhost:8001/.well-known/agent-card.json")
-    logger.info("🔗 A2A Endpoint: http://localhost:8001/")
+    logger.info(f"📋 Agent Card: {card_url}/.well-known/agent-card.json")
+    logger.info(f"🔗 A2A Endpoint: {card_url}/")
+    logger.info(f"🌐 Binding to {host}:{port}")
     
     uvicorn.run(
         "agent:create_purple_agent",
         factory=True,
-        host="0.0.0.0",
-        port=8001,
+        host=host,
+        port=port,
         log_level="info"
     )
 
