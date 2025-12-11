@@ -9,6 +9,7 @@ This agent:
 5. Demonstrates A2A-compatible agent capabilities with proper MCP integration
 """
 
+import asyncio
 import uuid
 import os
 import sys
@@ -27,6 +28,11 @@ from pydantic_ai.mcp import MCPServerStreamableHTTP
 # MCP client imports for direct tool calls
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
+
+# Jupyter MCP server for embedded startup
+import subprocess
+import threading
+import time
 
 from dotenv import load_dotenv
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
@@ -51,23 +57,117 @@ Context = List[Message]
 
 
 class PurpleWorker(Worker[Context]):
-    """Purple agent worker - fully autonomous with AI-driven decision making using Pydantic AI MCP."""
+    """Purple agent worker - fully autonomous with AI-driven decision making using embedded Jupyter MCP."""
     
-    def __init__(self, broker, storage, jupyter_token=None, base_url="http://localhost:8888"):
-        logger.info("🏗️  Initializing PurpleWorker with Pydantic AI MCP")
+    def __init__(self, broker, storage, jupyter_token=None, base_url=None):
+        logger.info("🏗️  Initializing PurpleWorker with embedded Jupyter MCP")
         super().__init__(storage=storage, broker=broker)
         self.jupyter_token = jupyter_token or os.getenv("JUPYTER_TOKEN")
-        self.base_url = base_url
-        self.mcp_url = f"{base_url}/mcp"
+        
+        # Use 0.0.0.0 for Docker compatibility, localhost for local development
+        if base_url is None:
+            # Check if we're running in Docker
+            if os.path.exists('/.dockerenv'):
+                self.base_url = "http://0.0.0.0:8888"
+                logger.info("🐳 Docker environment detected, using 0.0.0.0")
+            else:
+                self.base_url = "http://localhost:8888"
+                logger.info("💻 Local environment detected, using localhost")
+        else:
+            self.base_url = base_url
+            
+        self.mcp_url = f"{self.base_url}/mcp"
         self.agent = None
         self.mcp_server = None
         self._agent_setup_complete = False
         self._initial_files = set()  # Track files at task start
+        self._jupyter_process = None  # For embedded Jupyter MCP server
+        self._jupyter_started = False
         logger.info("✅ PurpleWorker initialized")
+    
+    async def start(self):
+        """Start the worker and setup the agent."""
+        logger.info("🔧 Setting up agent during worker startup...")
+        await self._setup_agent()
+        self._agent_setup_complete = True
+        logger.info("✅ Agent setup completed during startup")
+        
+    async def _start_embedded_jupyter_mcp(self):
+        """Start embedded Jupyter MCP server."""
+        if self._jupyter_started:
+            logger.info("📊 Jupyter MCP server already started")
+            return
+            
+        logger.info("🚀 Starting embedded Jupyter MCP server...")
+        
+        # Generate token if not provided
+        if not self.jupyter_token:
+            import secrets
+            self.jupyter_token = secrets.token_hex(16)
+            logger.info(f"🔑 Generated new Jupyter token: {self.jupyter_token[:8]}...")
+        
+        # Use current directory for agent workings
+        agent_workings_path = "agent-workings"
+        
+        # Start Jupyter MCP server in background thread
+        def start_jupyter():
+            try:
+                env = os.environ.copy()
+                env["JUPYTER_TOKEN"] = self.jupyter_token
+                
+                # Detect if we're in Docker for IP binding
+                ip_bind = "0.0.0.0" if os.path.exists('/.dockerenv') else "127.0.0.1"
+                
+                cmd = ["jupyter", "lab",
+                    f"--ip={ip_bind}",
+                    f"--port={self.base_url.split(':')[-1]}",
+                    "--no-browser",
+                    "--allow-root",
+                    f"--IdentityProvider.token={self.jupyter_token}",
+                    "--ServerApp.allow_origin_pat=.*",
+                    "--ServerApp.disable_check_xsrf=True",
+                    "--ServerApp.allow_remote_access=True",
+                ]
+                
+                logger.info(f"🎯 Starting Jupyter with command: {' '.join(cmd)}")
+                logger.info(f"📁 Working directory: {agent_workings_path}")
+                logger.info(f"🌐 Binding to IP: {ip_bind}")
+                
+                self._jupyter_process = subprocess.Popen(
+                    cmd,
+                    cwd=agent_workings_path,
+                    env=env,
+                    text=True
+                )
+                
+                # Don't monitor output to avoid blocking - just start the process
+                logger.info("📊 Jupyter MCP server started in background")
+                            
+            except Exception as e:
+                logger.error(f"❌ Failed to start Jupyter MCP: {e}")
+        
+        # Start in background thread
+        jupyter_thread = threading.Thread(target=start_jupyter, daemon=True)
+        jupyter_thread.start()
+        
+        # Wait for the process to start
+        logger.info("⏳ Waiting for Jupyter MCP server to be ready...")
+        await asyncio.sleep(8)  # Give it more time to start
+        
+        # Check if process is running
+        if self._jupyter_process and self._jupyter_process.poll() is None:
+            logger.info("✅ Jupyter MCP server process is running")
+            self._jupyter_started = True
+        else:
+            logger.warning("⚠️ Jupyter process may have failed, but proceeding...")
+            self._jupyter_started = True  # Proceed anyway
     
     async def _setup_agent(self):
         """Setup the Pydantic AI agent with MCP tools in async context."""
         try:
+            # Start embedded Jupyter MCP server first
+            await self._start_embedded_jupyter_mcp()
+            
             logger.info(f"🔧 Setting up Pydantic AI MCP client connecting to: {self.mcp_url}")
             
             # Create MCP server connection using streamable HTTP
@@ -312,12 +412,6 @@ Your workflow should be:
             message = params['message']
             logger.info(f"📨 Received message: {message}")
         
-            # Setup agent if not already done (async context required)
-            if not self._agent_setup_complete:
-                logger.info("🔧 Setting up agent in async context...")
-                await self._setup_agent()
-                self._agent_setup_complete = True
-            
             # Capture initial file state for cleanup
             await self._capture_initial_files()
             
@@ -453,6 +547,23 @@ Your workflow should be:
         artifacts.append(answer_artifact)
         
         return artifacts
+
+    def cleanup(self):
+        """Clean up resources including embedded Jupyter server."""
+        if self._jupyter_process:
+            logger.info("🛑 Stopping embedded Jupyter MCP server...")
+            try:
+                self._jupyter_process.terminate()
+                self._jupyter_process.wait(timeout=5)
+                logger.info("✅ Jupyter MCP server stopped")
+            except subprocess.TimeoutExpired:
+                logger.warning("⚠️ Force killing Jupyter MCP server...")
+                self._jupyter_process.kill()
+            except Exception as e:
+                logger.error(f"❌ Error stopping Jupyter MCP server: {e}")
+            finally:
+                self._jupyter_process = None
+                self._jupyter_started = False
     
     def _extract_text_from_parts(self, parts: List[Any]) -> str:
         """Extract text from message parts."""
@@ -525,6 +636,8 @@ def create_purple_agent() -> FastA2A:
     async def lifespan(app):
         async with app.task_manager:
             async with worker.run():
+                # Setup agent after worker starts
+                await worker.start()
                 yield
     
     # Create FastA2A application

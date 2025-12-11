@@ -49,10 +49,9 @@ class Launcher:
     def __init__(self, log_dir: Path):
         self.green_process: Optional[subprocess.Popen] = None
         self.purple_process: Optional[subprocess.Popen] = None
-        self.jupyter_process: Optional[subprocess.Popen] = None
         self.green_port = 8000
         self.purple_port = 8001
-        self.jupyter_port = 8888  # Standard Jupyter port
+        self.jupyter_port = 8888  # For reference only - purple agent manages its own Jupyter
         self.jupyter_token: Optional[str] = None
         self.log_dir = log_dir
         self.green_log_handle: Optional[Any] = None
@@ -138,121 +137,8 @@ class Launcher:
             print(f"❌ Error starting purple agent: {e}")
             return False
 
-    def start_jupyter_mcp(self) -> bool:
-        """Start JupyterLab with MCP server extension using token authentication."""
-        try:
-            print("📊 Starting JupyterLab with MCP Server...")
-            
-            # Generate a secure token for authentication
-            import secrets
-            jupyter_token = os.getenv("JUPYTER_TOKEN", secrets.token_urlsafe(32))
-            self.jupyter_token = jupyter_token
-            
-            print(f"🔑 Using Jupyter token: {jupyter_token[:8]}...")
-            
-            # Log to a file inside the timestamped log directory
-            jupyter_log_path = self.log_dir / "jupyter_mcp.log"
-            print(f"📝 JupyterLab logs will be written to: {jupyter_log_path}")
-            jupyter_log_handle = open(jupyter_log_path, "w")
-            
-            # Start JupyterLab with token authentication (no login required)
-            self.jupyter_process = subprocess.Popen([
-                "jupyter", "lab", 
-                f"--port={self.jupyter_port}",
-                "--no-browser",
-                f"--IdentityProvider.token={jupyter_token}",
-            ], cwd=f"{project_root}/agent-workings", stdout=jupyter_log_handle, stderr=subprocess.STDOUT)
-            
-            # Wait for startup
-            await_time = 8
-            print(f"⏳ Waiting {await_time}s for JupyterLab startup...")
-            time.sleep(await_time)
-            
-            # Check if process is still running
-            if self.jupyter_process.poll() is None:
-                print(f"✅ JupyterLab started on port {self.jupyter_port}")
-                print(f"🔗 JupyterLab URL: http://localhost:{self.jupyter_port}/lab?token={jupyter_token}")
-                
-                # Test the MCP extension endpoints (no separate server needed)
-                print("🔌 Testing MCP extension endpoints...")
-                return self._test_mcp_extension(jupyter_token)
-            else:
-                print(f"❌ JupyterLab failed to start (process exited)")
-                return False
-                
-        except Exception as e:
-            print(f"❌ Error starting JupyterLab MCP server: {e}")
-            return False
-    
-    def _test_mcp_extension(self, jupyter_token: str) -> bool:
-        """Test MCP extension endpoints within JupyterLab."""
-        try:
-            import requests
-            
-            # Store token for purple agent to use
-            os.environ["JUPYTER_TOKEN"] = jupyter_token
-            
-            # Wait a moment for extension to fully initialize
-            time.sleep(2)
-            
-            # Test MCP extension endpoints with token authentication
-            headers = {"Authorization": f"token {jupyter_token}"}
-            base_url = f"http://localhost:{self.jupyter_port}"
-            
-            # Test health endpoint
-            health_url = f"{base_url}/mcp/healthz"
-            response = requests.get(health_url, headers=headers, timeout=5)
-            
-            if response.status_code == 200:
-                print("✅ MCP extension health check passed")
-                
-                # Test tools endpoint
-                tools_url = f"{base_url}/mcp/tools/list"
-                tools_response = requests.get(tools_url, headers=headers, timeout=5)
-                
-                if tools_response.status_code == 200:
-                    tools_data = tools_response.json()
-                    tools_count = len(tools_data.get('tools', []))
-                    print(f"✅ MCP extension tools available: {tools_count} tools")
-                    print(f"🔗 MCP endpoint: {base_url}/mcp")
-                    return True
-                else:
-                    print(f"⚠️  MCP tools endpoint returned: {tools_response.status_code}")
-                    # Try without auth in case token isn't required for MCP endpoints
-                    tools_response_no_auth = requests.get(tools_url, timeout=5)
-                    if tools_response_no_auth.status_code == 200:
-                        tools_data = tools_response_no_auth.json()
-                        tools_count = len(tools_data.get('tools', []))
-                        print(f"✅ MCP extension tools available (no auth): {tools_count} tools")
-                        return True
-                    else:
-                        print(f"⚠️  MCP tools endpoint (no auth) returned: {tools_response_no_auth.status_code}")
-                        return True  # Extension loaded, assume it's working
-            else:
-                print(f"⚠️  MCP extension health check returned: {response.status_code}")
-                # Try without auth
-                response_no_auth = requests.get(health_url, timeout=5)
-                if response_no_auth.status_code == 200:
-                    print("✅ MCP extension health check passed (no auth)")
-                    return True
-                else:
-                    print(f"⚠️  MCP extension health check (no auth) returned: {response_no_auth.status_code}")
-                    return True  # Extension loaded, assume it's working
-                
-        except Exception as e:
-            print(f"⚠️  MCP extension test error: {e}")
-            return True  # Assume it's working if we can't test
-    
     def stop_agents(self):
         """Stop all agents and services."""
-        if self.jupyter_process and self.jupyter_process.poll() is None:
-            print("📊 Stopping JupyterLab...")
-            self.jupyter_process.terminate()
-            try:
-                self.jupyter_process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                self.jupyter_process.kill()
-        
         if self.green_process and self.green_process.poll() is None:
             print("🟢 Stopping green agent...")
             self.green_process.terminate()
@@ -262,7 +148,7 @@ class Launcher:
                 self.green_process.kill()
         
         if self.purple_process and self.purple_process.poll() is None:
-            print("🟣 Stopping purple agent...")
+            print("🟣 Stopping purple agent (and embedded Jupyter MCP)...")
             self.purple_process.terminate()
             try:
                 self.purple_process.wait(timeout=5)
@@ -635,14 +521,13 @@ Examples:
         success = True
         
         if args.purple_only:
-            # Start JupyterLab for MCP tools when starting purple agent
-            success = launcher.start_jupyter_mcp() and launcher.start_purple_agent()
+            # Purple agent now has embedded Jupyter MCP server
+            success = launcher.start_purple_agent()
         elif args.green_only:
             success = launcher.start_green_agent()
         else:
-            # Start JupyterLab MCP server, then both agents
-            success = (launcher.start_jupyter_mcp() and 
-                      launcher.start_purple_agent() and 
+            # Purple agent has embedded Jupyter MCP server, so just start both agents
+            success = (launcher.start_purple_agent() and 
                       launcher.start_green_agent())
         
         if not success:
@@ -672,9 +557,8 @@ Examples:
             launcher.run_interactive_mode()
         else:
             print("\n✅ All services started successfully!")
-            print(f"📊 JupyterLab MCP: http://localhost:{launcher.jupyter_port}")
-            print(f"🟢 Green Agent: http://localhost:{launcher.green_port}")
-            print(f"🟣 Purple Agent: http://localhost:{launcher.purple_port}")
+            print(f" Green Agent: http://localhost:{launcher.green_port}")
+            print(f"🟣 Purple Agent: http://localhost:{launcher.purple_port} (with embedded Jupyter MCP)")
             print("\nPress Ctrl+C to stop all services")
             
             # Keep running until interrupted

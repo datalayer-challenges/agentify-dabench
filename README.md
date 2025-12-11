@@ -11,8 +11,7 @@ The Data Agent Benchmark (DABench) is designed to measure and push the state-of-
 This project implements the [DABench](https://github.com/InfiAgent/InfiAgent/tree/main/examples/DA-Agent/data) benchmark as an A2A-compatible evaluation system where:
 
 - **Green Agent** (Evaluator): Manages DABench assessments and evaluates other agents
-- **Purple Agent** (Test Subject): The agent being evaluated, with MCP tool capabilities
-- **Jupyter MCP Server**: Provides code execution tools to the Purple Agent
+- **Purple Agent** (Test Subject): The agent being evaluated, with embedded Jupyter MCP capabilities
 - **Launcher**: One-command execution script for easy setup and evaluation
 
 ## Features
@@ -21,7 +20,7 @@ This project implements the [DABench](https://github.com/InfiAgent/InfiAgent/tre
 - ✅ **AgentBeats Architecture**: Proper green/purple agent separation as per [AgentBeats](https://rdi.berkeley.edu/agentx-agentbeats) guidelines
 - ✅ **DABench Scoring**: [DABench](https://github.com/InfiAgent/InfiAgent/tree/main/examples/DA-Agent/data) benchmark dataset 
 - ✅ **PydanticA AI Agent and Evaluation**: Utilizes [Pydantic AI](https://ai.pydantic.dev/evals/evaluators/llm-judge/) for agent and evaluation
-- ✅ **MCP Tools Integration**: Purple agent supports [jupyter-mcp-server](https://github.com/datalayer/jupyter-mcp-server) tools
+- ✅ **Embedded MCP Tools**: Purple agent includes embedded [jupyter-mcp-server](https://github.com/datalayer/jupyter-mcp-server) for autonomous code execution
 
 ## Quick Start
 
@@ -51,12 +50,8 @@ AZURE_OPENAI_API_VERSION=2024-06-01
 ### Option 1: All-in-One Launcher Script
 
 ```bash
-```bash
 # Install dependencies
 pip install -r requirements.txt
-
-# Start both green and purple agents
-python launcher.py
 
 # Full dataset evaluation
 python launcher.py --evaluate --full
@@ -67,23 +62,19 @@ python launcher.py --evaluate --quick-sample 3
 
 ### Option 2: Separate Services with Makefile
 
-For better control and monitoring, use the 4-terminal workflow:
+For better control and monitoring, use the 3-terminal workflow:
 
-```bash
 ```bash
 # Install dependencies
 pip install -r requirements.txt
 
-# Terminal 1: Start MCP Server
-make start-mcp
-
-# Terminal 2: Start Purple Agent (Test Subject)  
+# Terminal 1: Start Purple Agent (Test Subject with embedded MCP)  
 make start-purple
 
-# Terminal 3: Start Green Agent (Evaluator)
+# Terminal 2: Start Green Agent (Evaluator)
 make start-green
 
-# Terminal 4: Run Evaluation
+# Terminal 3: Run Evaluation
 make run-eval-monitor           # Full evaluation with real-time monitoring
 make run-eval-quick-monitor     # Quick 3-task evaluation with real-time monitoring
 ```
@@ -101,16 +92,13 @@ make docker-build-all
 
 ```bash
 # Start services in separate terminals:
-# Terminal 1: Start Jupyter MCP Server
-make docker-start-jupyter
-
-# Terminal 2: Start Purple Agent (Test Subject)
+# Terminal 1: Start Purple Agent with embedded MCP (Test Subject)
 make docker-start-purple
 
-# Terminal 3: Start Green Agent (Evaluator)
+# Terminal 2: Start Green Agent (Evaluator)
 make docker-start-green
 
-# Terminal 4: Run Evaluation (on Docker containers)
+# Terminal 3: Run Evaluation (on Docker containers)
 make docker-run-eval-quick-monitor     # Quick 3-task evaluation with monitoring
 make docker-run-eval-monitor           # Full dataset evaluation with monitoring
 ```
@@ -119,13 +107,10 @@ make docker-run-eval-monitor           # Full dataset evaluation with monitoring
 
 ```bash
 # Start services in separate terminals:
-# Terminal 1: Start Jupyter MCP Server
-make docker-start-jupyter-linux
-
-# Terminal 2: Start Purple Agent (Test Subject)
+# Terminal 1: Start Purple Agent with embedded MCP (Test Subject)
 make docker-start-purple-linux
 
-# Terminal 3: Start Green Agent (Evaluator)
+# Terminal 2: Start Green Agent (Evaluator)
 make docker-start-green-linux
 
 # Terminal 4: Run Evaluation (on Docker containers)
@@ -140,25 +125,26 @@ After evaluation, Pydantic AI generates a detailed report in the `results/` dire
 - Task-by-task performance breakdown
 - Green Agent reason for scores
 
-## Jupyter MCP Server Integration
+## Embedded Jupyter MCP Integration
 
-The Purple Agent is integrated with [**Jupyter MCP (Model Context Protocol) Server**](https://github.com/datalayer/jupyter-mcp-server) for enhanced data analysis and code execution capabilities. This integration provides the agent with powerful computational tools for autonomous problem-solving.
+The Purple Agent includes an embedded [**Jupyter MCP (Model Context Protocol) Server**](https://github.com/datalayer/jupyter-mcp-server) for enhanced data analysis and code execution capabilities. This embedded server provides the agent with powerful computational tools for autonomous problem-solving without requiring a separate container.
 
-### Authentication & Security
+### Embedded MCP Features
 
-#### Token-Based Authentication
-The MCP server uses Bearer token authentication for security:
+#### Automatic Startup
+The Purple Agent automatically starts its own Jupyter MCP server:
 
 ```python
-# Purple Agent automatically uses token from environment
-headers = {"Authorization": f"Bearer {self.jupyter_token}"}
+# Purple Agent starts embedded Jupyter MCP server on initialization
+await self._start_embedded_jupyter_mcp()
 
-# Automatic fallback to no-auth if token fails
-# (for development environments)
+# Automatically generates tokens and manages server lifecycle
+# No external MCP server setup required
 ```
 
 #### Network Configuration
-- **Default Port**: 8888 (JupyterLab standard)
+- **Agent Port**: 8001 (Purple Agent A2A endpoint)
+- **Embedded MCP Port**: 8888 (JupyterLab standard)
 - **MCP Endpoints**: `http://localhost:8888/mcp/*`
 - **Health Check**: `http://localhost:8888/mcp/healthz`
 - **Tools List**: `http://localhost:8888/mcp/tools/list`
@@ -168,5 +154,5 @@ headers = {"Authorization": f"Bearer {self.jupyter_token}"}
 
 The evaluation process involves two data components:
 
-- **Data Files**: 68 diverse CSV datasets in `agent-workings/data/` available for the Purple Agent to analyze through the Jupyter MCP Server
+- **Data Files**: 68 diverse CSV datasets in `src/purple/agent-workings/data/` available for the Purple Agent to analyze through the Jupyter MCP Server
 - **Task Distribution**: Green Agent sends tasks one-by-one from the 257 DABench evaluation tasks stored in `data-dabench/`

@@ -11,7 +11,6 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME_GREEN: ${{ github.repository }}-green
   IMAGE_NAME_PURPLE: ${{ github.repository }}-purple
-  IMAGE_NAME_JUPYTER: ${{ github.repository }}-jupyter
 
 jobs:
   build-and-push:
@@ -28,9 +27,6 @@ jobs:
             context: .
           - dockerfile: Dockerfile.purple  
             image: purple
-            context: .
-          - dockerfile: Dockerfile.jupyter
-            image: jupyter
             context: .
 
     steps:
@@ -55,6 +51,7 @@ jobs:
           type=semver,pattern={{version}}
           type=semver,pattern={{major}}.{{minor}}
           type=sha,prefix=sha-
+          type=raw,value=latest,enable={{is_default_branch}}
 
     - name: Build and push Docker image
       uses: docker/build-push-action@v5

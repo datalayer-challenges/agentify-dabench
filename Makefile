@@ -1,4 +1,4 @@
-.PHONY: help start-mcp start-purple start-green run-eval-monitor run-eval-quick-monitor docker-build-all docker-build-agentbeats docker-push-agentbeats docker-start-jupyter docker-start-purple docker-start-green docker-run-eval-monitor docker-run-eval-quick-monitor docker-start-jupyter-linux docker-start-purple-linux docker-start-green-linux docker-run-eval-monitor-linux docker-run-eval-quick-monitor-linux
+.PHONY: help start-purple start-green run-eval-monitor run-eval-quick-monitor docker-build-all docker-build-agentbeats docker-push-agentbeats docker-start-purple docker-start-green docker-run-eval-monitor docker-run-eval-quick-monitor docker-start-purple-linux docker-start-green-linux docker-run-eval-monitor-linux docker-run-eval-quick-monitor-linux
 
 # Default Python executable
 PYTHON := python
@@ -7,7 +7,7 @@ PYTHON := python
 PROJECT_ROOT := $(shell pwd)
 PURPLE_DIR := src/purple_agent
 GREEN_DIR := src/green_agent
-AGENT_WORKINGS_DIR := agent-workings
+AGENT_WORKINGS_DIR := src/purple_agent/agent-workings
 LOGS_DIR := logs
 
 # Ports (matching launcher.py)
@@ -36,27 +36,11 @@ help: ## Show this help message
 # Local Development Commands
 # ============================================================================
 
-start-mcp: ## Start JupyterLab MCP server (foreground - keeps terminal busy)
-	@echo "$(BLUE)📊 Starting JupyterLab with MCP Server...$(RESET)"
+start-purple: ## Start purple agent with embedded MCP (foreground - keeps terminal busy)
+	@echo "$(BLUE)� Starting Purple Agent with embedded Jupyter MCP...$(RESET)"
 	@mkdir -p $(LOG_DIR)
-	@JUPYTER_TOKEN=$${JUPYTER_TOKEN:-$$(openssl rand -hex 16)} && \
-	echo "$(CYAN)🔑 Using Jupyter token: $${JUPYTER_TOKEN:0:8}...$(RESET)" && \
-	echo "$(CYAN)🔗 JupyterLab URL: http://localhost:$(JUPYTER_PORT)/lab?token=$${JUPYTER_TOKEN}$(RESET)" && \
-	echo "$(YELLOW)📝 Logs will also be saved to: $(LOG_DIR)/jupyter_mcp.log$(RESET)" && \
-	echo "$(YELLOW)🚀 Starting JupyterLab... (Press Ctrl+C to stop)$(RESET)" && \
-	echo "$(BLUE)────────────────────────────────────────$(RESET)" && \
-	export JUPYTER_TOKEN=$${JUPYTER_TOKEN} && \
-	cd $(AGENT_WORKINGS_DIR) && \
-	jupyter lab \
-		--port=$(JUPYTER_PORT) \
-		--no-browser \
-		--IdentityProvider.token=$${JUPYTER_TOKEN} \
-	| tee ../$(LOG_DIR)/jupyter_mcp.log
-
-start-purple: ## Start purple agent (foreground - keeps terminal busy)
-	@echo "$(BLUE)🟣 Starting Purple Agent (Test Subject)...$(RESET)"
-	@mkdir -p $(LOG_DIR)
-	@echo "$(CYAN)🔗 Purple agent endpoint: http://localhost:$(PURPLE_PORT)$(RESET)"
+	@echo "$(CYAN)� Purple agent endpoint: http://localhost:$(PURPLE_PORT)$(RESET)"
+	@echo "$(CYAN)📊 Embedded Jupyter MCP: http://localhost:$(JUPYTER_PORT)$(RESET)"
 	@echo "$(YELLOW)🚀 Starting Purple Agent... (Press Ctrl+C to stop)$(RESET)"
 	@echo "$(BLUE)────────────────────────────────────────$(RESET)"
 	@cd $(PURPLE_DIR) && $(PYTHON) agent.py | tee ../../$(LOG_DIR)/purple_agent.log
@@ -86,7 +70,6 @@ DOCKER_RUN := docker run
 
 docker-build-all: ## Build all Docker images
 	@echo "$(BLUE)🐳 Building all Docker images...$(RESET)"
-	@$(DOCKER_BUILD) -f Dockerfile.jupyter -t agentbeats-jupyter:latest .
 	@$(DOCKER_BUILD) -f Dockerfile.purple -t agentbeats-purple:latest .
 	@$(DOCKER_BUILD) -f Dockerfile.green -t agentbeats-green:latest .
 	@echo "$(GREEN)✅ All Docker images built successfully$(RESET)"
@@ -95,44 +78,31 @@ docker-build-agentbeats: ## Build Docker images for AgentBeats deployment (linux
 	@echo "$(BLUE)🐳 Building AgentBeats-compatible Docker images (linux/amd64)...$(RESET)"
 	@echo "$(YELLOW)📦 Building Green Agent...$(RESET)"
 	@docker build --platform linux/amd64 -f Dockerfile.green -t ghcr.io/$(USER)/agentify-dab-step-green:latest .
-	@echo "$(YELLOW)📦 Building Purple Agent...$(RESET)"  
+	@echo "$(YELLOW)📦 Building Purple Agent (with embedded MCP)...$(RESET)"  
 	@docker build --platform linux/amd64 -f Dockerfile.purple -t ghcr.io/$(USER)/agentify-dab-step-purple:latest .
-	@echo "$(YELLOW)📦 Building Jupyter MCP Server...$(RESET)"
-	@docker build --platform linux/amd64 -f Dockerfile.jupyter -t ghcr.io/$(USER)/agentify-dab-step-jupyter:latest .
 	@echo "$(GREEN)✅ All AgentBeats-compatible images built successfully$(RESET)"
 	@echo "$(CYAN)🚀 Ready to push to GitHub Container Registry:$(RESET)"
 	@echo "  docker push ghcr.io/$(USER)/agentify-dab-step-green:latest"
-	@echo "  docker push ghcr.io/$(USER)/agentify-dab-step-purple:latest"  
-	@echo "  docker push ghcr.io/$(USER)/agentify-dab-step-jupyter:latest"
+	@echo "  docker push ghcr.io/$(USER)/agentify-dab-step-purple:latest"
 
 docker-push-agentbeats: ## Push AgentBeats images to GitHub Container Registry
 	@echo "$(BLUE)🐳 Pushing AgentBeats images to GitHub Container Registry...$(RESET)"
 	@docker push ghcr.io/$(USER)/agentify-dab-step-green:latest
 	@docker push ghcr.io/$(USER)/agentify-dab-step-purple:latest
-	@docker push ghcr.io/$(USER)/agentify-dab-step-jupyter:latest
 	@echo "$(GREEN)✅ All images pushed successfully$(RESET)"
 
 # ============================================================================
-# macOS Docker Commands (default - use host.docker.internal)
+# macOS Docker Commands (default - embedded MCP in purple agent)
 # ============================================================================
 
-docker-start-jupyter: ## Start Jupyter MCP in foreground (macOS - keeps terminal busy)
+docker-start-purple: ## Start Purple Agent with embedded MCP in foreground (macOS - keeps terminal busy)
 	@if [ ! -f .env ]; then echo "$(RED)❌ .env file not found$(RESET)"; exit 1; fi
-	@echo "$(BLUE)🐳 Starting Jupyter MCP in Docker (macOS)...$(RESET)"
+	@echo "$(BLUE)🐳 Starting Purple Agent with embedded Jupyter MCP in Docker (macOS)...$(RESET)"
 	@$(DOCKER_RUN) --rm -it \
 		--env-file .env \
 		-p 8888:8888 \
-		-v $(PWD)/agent-workings:/app/agent-workings \
-		-v $(PWD)/logs:/app/logs \
-		agentbeats-jupyter:latest
-
-docker-start-purple: ## Start Purple Agent in foreground (macOS - keeps terminal busy)
-	@if [ ! -f .env ]; then echo "$(RED)❌ .env file not found$(RESET)"; exit 1; fi
-	@echo "$(BLUE)🐳 Starting Purple Agent in Docker (macOS)...$(RESET)"
-	@$(DOCKER_RUN) --rm -it \
-		--env-file .env \
-		-e JUPYTER_BASE_URL=http://host.docker.internal:8888 \
 		-p 8001:8001 \
+		-v $(PWD)/src/purple_agent/agent-workings:/app/agent-workings \
 		-v $(PWD)/logs:/app/logs \
 		-v $(PWD)/results:/app/results \
 		agentbeats-purple:latest
@@ -157,26 +127,16 @@ docker-run-eval-quick-monitor: ## Send quick evaluation request to Docker contai
 	@$(PYTHON) send_evaluation.py --tasks 3 --monitor --green-url http://localhost:8000 --purple-url http://host.docker.internal:8001
 
 # ============================================================================
-# Linux Docker Commands (use --network=host)
+# Linux Docker Commands (embedded MCP in purple agent)
 # ============================================================================
 
-docker-start-jupyter-linux: ## Start Jupyter MCP in foreground (Linux - keeps terminal busy)
+docker-start-purple-linux: ## Start Purple Agent with embedded MCP in foreground (Linux - keeps terminal busy)
 	@if [ ! -f .env ]; then echo "$(RED)❌ .env file not found$(RESET)"; exit 1; fi
-	@echo "$(BLUE)🐳 Starting Jupyter MCP in Docker (Linux)...$(RESET)"
+	@echo "$(BLUE)🐳 Starting Purple Agent with embedded Jupyter MCP in Docker (Linux)...$(RESET)"
 	@$(DOCKER_RUN) --rm -it \
 		--env-file .env \
 		--network=host \
-		-v $(PWD)/agent-workings:/app/agent-workings \
-		-v $(PWD)/logs:/app/logs \
-		agentbeats-jupyter:latest
-
-docker-start-purple-linux: ## Start Purple Agent in foreground (Linux - keeps terminal busy)
-	@if [ ! -f .env ]; then echo "$(RED)❌ .env file not found$(RESET)"; exit 1; fi
-	@echo "$(BLUE)🐳 Starting Purple Agent in Docker (Linux)...$(RESET)"
-	@$(DOCKER_RUN) --rm -it \
-		--env-file .env \
-		-e JUPYTER_BASE_URL=http://localhost:8888 \
-		--network=host \
+		-v $(PWD)/src/purple_agent/agent-workings:/app/agent-workings \
 		-v $(PWD)/logs:/app/logs \
 		-v $(PWD)/results:/app/results \
 		agentbeats-purple:latest
