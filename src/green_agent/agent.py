@@ -236,6 +236,7 @@ Example: "Please evaluate the agent at http://localhost:8001 using these tasks: 
                 constraints = task_data['constraints']
                 format_info = task_data['format']
                 file_name = task_data['file_name']
+                case_name = task_data['case_name']  # Get the case name
                 
                 # Create task prompt for purple agent using DABench format
                 task_prompt = f"""You are an expert data analyst and you will answer the question using the tools at your disposal.
@@ -335,8 +336,10 @@ Here is the question you need to answer:
                     if 'result' in task_response:
                         final_task = task_response['result']
                         
-                        # Store completed task for token usage aggregation
-                        self.completed_tasks.append(final_task)
+                        # Store completed task with case name for token usage aggregation
+                        final_task_with_id = dict(final_task)
+                        final_task_with_id['case_name'] = case_name  # Use the case name from inputs
+                        self.completed_tasks.append(final_task_with_id)
                         
                         # Use the outer self reference
                         agent_answer = self._extract_agent_answer(final_task)
@@ -376,7 +379,7 @@ Here is the question you need to answer:
             
             case = Case(
                 name=task['task_id'],
-                inputs={'question': task['question'], 'constraints': task['constraints'], 'format': task['format'], 'file_name': task['file_name']},
+                inputs={'question': task['question'], 'constraints': task['constraints'], 'format': task['format'], 'file_name': task['file_name'], 'case_name': task['task_id']},  # Add case_name to inputs
                 expected_output=task['correct_answer'],
                 metadata={
                     'level': task['level'],
@@ -482,13 +485,17 @@ Here is the question you need to answer:
                         'metadata': case.metadata,
                     }
                     
-                    # Add evaluator scores/results if available
-                    if hasattr(case, 'scores'):
-                        case_data['scores'] = case.scores
-                    if hasattr(case, 'labels'):
-                        case_data['labels'] = case.labels
-                    if hasattr(case, 'metrics'):
-                        case_data['metrics'] = case.metrics
+                    # Find the corresponding completed task for this case and add token usage
+                    task_token_usage = None
+                    if completed_tasks:
+                        # Match by case name (which is the task_id)
+                        for task in completed_tasks:
+                            if case.name == task.get('case_name'):
+                                task_token_usage = self._extract_token_usage(task)
+                                break
+                    
+                    if task_token_usage:
+                        case_data['token_usage'] = task_token_usage
                         
                     report_data['cases'].append(case_data)
                 
@@ -683,23 +690,35 @@ Here is the question you need to answer:
         # Convert EvaluationReport to serializable format using proper API
         if hasattr(report, 'cases') and hasattr(report, 'failures'):
             # This is a proper EvaluationReport object - extract using documented API
+            cases_data = []
+            for case in getattr(report, 'cases', []):
+                case_data = {
+                    'name': case.name,
+                    'inputs': case.inputs,
+                    'expected_output': case.expected_output,
+                    'output': case.output,
+                }
+                
+                # Find the corresponding completed task for this case and add token usage
+                task_token_usage = None
+                if hasattr(self, 'completed_tasks') and self.completed_tasks:
+                    # Match by case name (which is the task_id)
+                    for task in self.completed_tasks:
+                        if case.name == task.get('case_name'):
+                            task_token_usage = self._extract_token_usage(task)
+                            break
+                
+                if task_token_usage:
+                    case_data['token_usage'] = task_token_usage
+                    
+                cases_data.append(case_data)
+            
             report_data = {
                 'name': getattr(report, 'name', 'Evaluation Report'),
                 'total_cases': len(getattr(report, 'cases', [])) + len(getattr(report, 'failures', [])),
                 'successful_cases': len(getattr(report, 'cases', [])),
                 'failed_cases': len(getattr(report, 'failures', [])),
-                'cases': [
-                    {
-                        'name': case.name,
-                        'inputs': case.inputs,
-                        'expected_output': case.expected_output,
-                        'output': case.output,
-                        'scores': getattr(case, 'scores', {}),
-                        'labels': getattr(case, 'labels', {}),
-                        'metrics': getattr(case, 'metrics', {}),
-                    }
-                    for case in getattr(report, 'cases', [])
-                ],
+                'cases': cases_data,
                 'failures': [
                     {
                         'name': failure.name,
