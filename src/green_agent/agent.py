@@ -77,15 +77,6 @@ class GreenWorker(Worker[Context]):
         logger.info(f"📝 Processing task {params['id']}")
         await self.storage.update_task(task['id'], state='working')
         
-        # Send immediate working status with initial message
-        initial_working_message = Message(
-            role='agent',
-            parts=[TextPart(text="Starting task processing...", kind='text')],
-            kind='message',
-            message_id=str(uuid.uuid4())
-        )
-        await self.storage.update_task(task['id'], state='working', new_messages=[initial_working_message])
-        
         try:
             # Load context
             context = await self.storage.load_context(task['context_id']) or []
@@ -98,20 +89,6 @@ class GreenWorker(Worker[Context]):
             if eval_request:
                 # Handle evaluation request using Pydantic Eval
                 logger.info("🔍 Processing evaluation request with Pydantic Eval...")
-                
-                # Update status to working and send initial status message
-                await self.storage.update_task(task['id'], state='working')
-                initial_message = Message(
-                    role='agent',
-                    parts=[TextPart(text="Starting evaluation with Pydantic Eval framework...", kind='text')],
-                    kind='message',
-                    message_id=str(uuid.uuid4())
-                )
-                await self.storage.update_task(
-                    task['id'], 
-                    state='working',
-                    new_messages=[initial_message]
-                )
                 
                 report = await self._evaluate_agent_pydantic(eval_request, task['id'])
                 response_message = self._create_response_message(report)
@@ -327,15 +304,6 @@ Example: "Please evaluate the agent at http://localhost:9019 using these tasks: 
         logger.info(f"🤖 Starting Pydantic Eval assessment of agent at {purple_agent_url}")
         logger.info(f"📝 Evaluating {len(tasks)} tasks")
         
-        # Send progress update
-        progress_message = Message(
-            role='agent',
-            parts=[TextPart(text=f"Starting evaluation of {len(tasks)} tasks using Pydantic Eval framework", kind='text')],
-            kind='message',
-            message_id=str(uuid.uuid4())
-        )
-        await self.storage.update_task(task_id, state='working', new_messages=[progress_message])
-        
         # Create timeout configuration for purple agent communication
         import httpx
         timeout = httpx.Timeout(
@@ -357,16 +325,6 @@ Example: "Please evaluate the agent at http://localhost:9019 using these tasks: 
                 format_info = task_data['format']
                 file_name = task_data['file_name']
                 case_name = task_data['case_name']  # Get the case name
-                
-                # Send progress update for this specific task
-                task_progress_message = Message(
-                    role='agent',
-                    parts=[TextPart(text=f"Running task: {case_name} - {question[:50]}{'...' if len(question) > 50 else ''}", kind='text')],
-                    kind='message',
-                    message_id=str(uuid.uuid4())
-                )
-                # Use the correct task_id from the parent scope
-                await self.storage.update_task(task_id, state='working', new_messages=[task_progress_message])
                 
                 # Create task prompt for purple agent using DABench format
                 task_prompt = f"""You are an expert data analyst and you will answer the question using the tools at your disposal.
@@ -541,15 +499,6 @@ Here is the question you need to answer:
         )
         
         logger.info(f"🔍 Running Pydantic Eval with {len(cases)} cases and {len(evaluators)} evaluators...")
-        
-        # Send progress update before starting evaluation
-        eval_start_message = Message(
-            role='agent',
-            parts=[TextPart(text=f"Running Pydantic Eval with {len(cases)} cases and {len(evaluators)} evaluators...", kind='text')],
-            kind='message',
-            message_id=str(uuid.uuid4())
-        )
-        await self.storage.update_task(task_id, state='working', new_messages=[eval_start_message])
         
         # Run evaluation with limited concurrency to avoid overwhelming the purple agent
         start_time = time.time()
@@ -930,6 +879,7 @@ def create_green_agent(card_url: str = None) -> FastA2A:
         version="1.0.0",
         provider=provider,
         skills=[evaluation_skill],
+        streaming=True,
         lifespan=lifespan
     )
     
@@ -962,12 +912,11 @@ def main():
     logger.info("🎯 Evaluation Framework: Pydantic Eval with LLM as Judge")
     logger.info(f"🌐 Binding to {host}:{port}")
 
-    # Create a factory function that uses the card_url
-    def create_app():
-        return create_green_agent(card_url)
+    # Create the app directly instead of using a factory
+    app = create_green_agent(card_url)
 
     uvicorn.run(
-        create_app,
+        app,
         host=host,
         port=port,
         log_level="info"
