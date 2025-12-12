@@ -89,13 +89,13 @@ class GreenWorker(Worker[Context]):
             if eval_request:
                 # Handle evaluation request using Pydantic Eval
                 logger.info("🔍 Processing evaluation request with Pydantic Eval...")
-                report = await self._evaluate_agent_pydantic(eval_request)
+                report = self._evaluate_agent_pydantic(eval_request)
                 response_message = self._create_response_message(report)
                 artifacts = self._create_response_artifacts(report)
             else:
                 # Handle simple message (like "hello")
                 logger.info("💬 Processing simple message...")
-                response_message = await self._handle_simple_message(message)
+                response_message = self._handle_simple_message(message)
                 artifacts = []
             
             # Update context and complete task
