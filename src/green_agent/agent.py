@@ -89,7 +89,21 @@ class GreenWorker(Worker[Context]):
             if eval_request:
                 # Handle evaluation request using Pydantic Eval
                 logger.info("🔍 Processing evaluation request with Pydantic Eval...")
-                report = await self._evaluate_agent_pydantic(eval_request)
+                
+                # Update status to working and send initial status message
+                await self.storage.update_task(task['id'], state='working')
+                initial_message = Message(
+                    role='agent',
+                    parts=[TextPart(text="Starting evaluation with Pydantic Eval framework...", kind='text')],
+                    kind='message',
+                    message_id=str(uuid.uuid4())
+                )
+                await self.storage.update_task(
+                    task['id'], 
+                    new_messages=[initial_message]
+                )
+                
+                report = await self._evaluate_agent_pydantic(eval_request, task['id'])
                 response_message = self._create_response_message(report)
                 artifacts = self._create_response_artifacts(report)
             else:
@@ -292,7 +306,7 @@ Example: "Please evaluate the agent at http://localhost:9019 using these tasks: 
             message_id=str(uuid.uuid4())
         )
 
-    async def _evaluate_agent_pydantic(self, eval_request: dict) -> dict:
+    async def _evaluate_agent_pydantic(self, eval_request: dict, task_id: str) -> dict:
         """Evaluate an agent using Pydantic Eval framework."""
         purple_agent_url = eval_request['purple_agent_url']
         tasks = eval_request['tasks']
@@ -302,6 +316,15 @@ Example: "Please evaluate the agent at http://localhost:9019 using these tasks: 
         
         logger.info(f"🤖 Starting Pydantic Eval assessment of agent at {purple_agent_url}")
         logger.info(f"📝 Evaluating {len(tasks)} tasks")
+        
+        # Send progress update
+        progress_message = Message(
+            role='agent',
+            parts=[TextPart(text=f"Starting evaluation of {len(tasks)} tasks using Pydantic Eval framework", kind='text')],
+            kind='message',
+            message_id=str(uuid.uuid4())
+        )
+        await self.storage.update_task(task_id, new_messages=[progress_message])
         
         # Create timeout configuration for purple agent communication
         import httpx
@@ -324,6 +347,15 @@ Example: "Please evaluate the agent at http://localhost:9019 using these tasks: 
                 format_info = task_data['format']
                 file_name = task_data['file_name']
                 case_name = task_data['case_name']  # Get the case name
+                
+                # Send progress update for this specific task
+                task_progress_message = Message(
+                    role='agent',
+                    parts=[TextPart(text=f"Running task: {case_name} - {question[:50]}{'...' if len(question) > 50 else ''}", kind='text')],
+                    kind='message',
+                    message_id=str(uuid.uuid4())
+                )
+                await self.storage.update_task(task_id, new_messages=[task_progress_message])
                 
                 # Create task prompt for purple agent using DABench format
                 task_prompt = f"""You are an expert data analyst and you will answer the question using the tools at your disposal.
@@ -498,6 +530,15 @@ Here is the question you need to answer:
         )
         
         logger.info(f"🔍 Running Pydantic Eval with {len(cases)} cases and {len(evaluators)} evaluators...")
+        
+        # Send progress update before starting evaluation
+        eval_start_message = Message(
+            role='agent',
+            parts=[TextPart(text=f"Running Pydantic Eval with {len(cases)} cases and {len(evaluators)} evaluators...", kind='text')],
+            kind='message',
+            message_id=str(uuid.uuid4())
+        )
+        await self.storage.update_task(task_id, new_messages=[eval_start_message])
         
         # Run evaluation with limited concurrency to avoid overwhelming the purple agent
         start_time = time.time()
