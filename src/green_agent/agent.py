@@ -110,10 +110,14 @@ class GreenWorker(Worker[Context]):
                 new_artifacts=artifacts
             )
             
+            # Get stored artifacts for streaming (A2A framework serializes them to dicts)
+            stored_task = await self.storage.load_task(task['id'])
+            stored_artifacts = stored_task.get('artifacts', []) if stored_task else []
+            
             # Emit final completion event with artifact and status
-            if artifacts:
-                # Extract the report data from the artifact
-                report_data = artifacts[0].parts[0].data if artifacts[0].parts else {}
+            if stored_artifacts:
+                artifact = stored_artifacts[0]
+                report_data = artifact['parts'][0]['data']
                 
                 await self.broker.send_stream_event(params['id'], {
                     'kind': 'task-completed',
@@ -121,9 +125,9 @@ class GreenWorker(Worker[Context]):
                     'context_id': task['context_id'],
                     'status': {'state': 'completed'},
                     'artifact': {
-                        'artifact_id': artifacts[0].artifact_id,
-                        'name': artifacts[0].name,
-                        'description': artifacts[0].description,
+                        'artifact_id': artifact['artifact_id'],
+                        'name': artifact['name'],
+                        'description': artifact['description'],
                         'parts': [{'kind': 'data', 'data': report_data}]
                     },
                     'final': True
