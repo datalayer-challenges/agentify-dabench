@@ -35,8 +35,8 @@ ENV PURPLE_PORT=9019
 EXPOSE 9019
 
 # Health check for purple agent
-# HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-#     CMD curl -f http://localhost:9019/.well-known/agent-card.json || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:9019/.well-known/agent-card.json || exit 1
 
 # Default command-line arguments
 CMD ["--host", "0.0.0.0"]

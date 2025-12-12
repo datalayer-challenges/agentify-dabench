@@ -36,8 +36,8 @@ ENV GREEN_PORT=9009
 EXPOSE 9009
 
 # Health check for green agent
-# HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-#     CMD curl -f http://localhost:9009/.well-known/agent-card.json || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:9009/.well-known/agent-card.json || exit 1
 
 # Default command-line arguments
 CMD ["--host", "0.0.0.0"]
