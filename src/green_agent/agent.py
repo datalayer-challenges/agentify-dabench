@@ -237,12 +237,12 @@ class GreenWorker(Worker[Context]):
             converted_tasks = []
             for task in selected_tasks:
                 converted_task = {
-                    'case_name': f"task_{task.get('id', len(converted_tasks))}",
+                    'task_id': f"task_{task.get('id', len(converted_tasks))}",
                     'question': task['question'],
                     'constraints': task.get('constraints', ''),
                     'format': task.get('format', ''),
                     'file_name': task.get('file_name', ''),
-                    'expected_answer': task.get('answer', ''),
+                    'correct_answer': task.get('answer', ''),
                     'concepts': task.get('concepts', []),
                     'level': task.get('level', 'medium')
                 }
@@ -253,18 +253,6 @@ class GreenWorker(Worker[Context]):
             
         except Exception as e:
             logger.error(f"❌ Failed to load tasks from dataset: {e}")
-            # Fallback to a minimal task set
-            logger.warning("🔄 Falling back to minimal task set")
-            return [{
-                'case_name': 'fallback_task',
-                'question': 'Calculate the mean of the first column in the dataset.',
-                'constraints': 'Use pandas to calculate the mean.',
-                'format': '@mean[value] where value is a number rounded to 2 decimal places',
-                'file_name': 'test_ave.csv',
-                'expected_answer': '@mean[31.72]',
-                'concepts': ['Summary Statistics'],
-                'level': 'easy'
-            }]
     
     async def _handle_simple_message(self, message: Message) -> Message:
         """Handle simple messages like greetings or basic questions."""
