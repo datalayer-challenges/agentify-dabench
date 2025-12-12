@@ -89,13 +89,13 @@ class GreenWorker(Worker[Context]):
             if eval_request:
                 # Handle evaluation request using Pydantic Eval
                 logger.info("🔍 Processing evaluation request with Pydantic Eval...")
-                report = self._evaluate_agent_pydantic(eval_request)
+                report = await self._evaluate_agent_pydantic(eval_request)
                 response_message = self._create_response_message(report)
                 artifacts = self._create_response_artifacts(report)
             else:
                 # Handle simple message (like "hello")
                 logger.info("💬 Processing simple message...")
-                response_message = self._handle_simple_message(message)
+                response_message = await self._handle_simple_message(message)
                 artifacts = []
             
             # Update context and complete task
@@ -237,7 +237,7 @@ class GreenWorker(Worker[Context]):
             converted_tasks = []
             for task in selected_tasks:
                 converted_task = {
-                    'task_id': f"task_{task.get('id', len(converted_tasks))}",
+                    'task_id': f"task_{task.get('task_id', len(converted_tasks))}",
                     'question': task['question'],
                     'constraints': task.get('constraints', ''),
                     'format': task.get('format', ''),
@@ -774,6 +774,16 @@ Here is the question you need to answer:
         """Create artifacts with Pydantic Eval results."""
         artifacts = []
         
+        # Calculate simple metrics from report
+        total_cases = len(getattr(report, 'cases', [])) + len(getattr(report, 'failures', []))
+        successful_cases = len(getattr(report, 'cases', []))
+        metrics = {
+            'total_cases': total_cases,
+            'successful_cases': successful_cases,
+            'failed_cases': len(getattr(report, 'failures', [])),
+            'success_rate': successful_cases / total_cases if total_cases > 0 else 0
+        }
+        
         # Convert EvaluationReport to serializable format using proper API
         if hasattr(report, 'cases') and hasattr(report, 'failures'):
             # This is a proper EvaluationReport object - extract using documented API
@@ -813,7 +823,8 @@ Here is the question you need to answer:
                         'inputs': failure.inputs,
                     }
                     for failure in getattr(report, 'failures', [])
-                ]
+                ],
+                'metrics': metrics
             }
         elif hasattr(report, 'model_dump'):
             # Pydantic v2 style serialization

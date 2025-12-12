@@ -1,0 +1,37 @@
+{'artifact_id': '8942ad07-39c3-45c2-bb10-0590a447da67', 'name': 'pydantic_eval_report', 'description': 'Complete Pydantic Eval assessment report', 'parts': [
+        {'kind': 'data', 'data': {'name': 'evaluate_purple_agent', 'total_cases': 3, 'successful_cases': 3, 'failed_cases': 0, 'success_rate': None, 'cases': [
+                    {'name': '0', 'inputs': {'question': 'Calculate the mean fare paid by the passengers.', 'constraints': "Calculate the mean fare using Python's built-in statistics module or appropriate statistical method in pandas. Rounding off the answer to two decimal places.", 'format': '@mean_fare[mean_fare_value
+                            ] where "mean_fare_value" is a floating-point number rounded to two decimal places.', 'file_name': 'test_ave.csv', 'case_name': '0'
+                        }, 'expected_output': 'mean_fare: 34.65', 'output': '@mean_fare[
+                            34.65
+                        ]', 'token_usage': {'requests': 3, 'request_tokens': 5345, 'response_tokens': 121, 'total_tokens': 5466
+                        }
+                    },
+                    {'name': '5', 'inputs': {'question': 'Generate a new feature called "FamilySize" by summing the "SibSp" and "Parch" columns. Then, calculate the Pearson correlation coefficient (r) between the "FamilySize" and "Fare" columns.', 'constraints': "Create a new column 'FamilySize' that is the sum of 'SibSp' and 'Parch' for each row.\nCalculate the Pearson correlation coefficient between 'FamilySize' and 'Fare'\nDo not perform any further data cleaning or preprocessing steps before calculating the correlation.", 'format': '@correlation_coefficient[r_value
+                            ]\nwhere "r_value" is the Pearson correlation coefficient between \'FamilySize\' and \'Fare\', a number between -1 and 1, rounded to two decimal places.', 'file_name': 'test_ave.csv', 'case_name': '5'
+                        }, 'expected_output': 'correlation_coefficient: 0.21', 'output': '@correlation_coefficient[
+                            0.21
+                        ]', 'token_usage': {'requests': 3, 'request_tokens': 5575, 'response_tokens': 177, 'total_tokens': 5752
+                        }
+                    },
+                    {'name': '6', 'inputs': {'question': 'Create a new column called "AgeGroup" that categorizes the passengers into four age groups: \'Child\' (0-12 years old), \'Teenager\' (13-19 years old), \'Adult\' (20-59 years old), and \'Elderly\' (60 years old and above). Then, calculate the mean fare for each age group.', 'constraints': 'Make sure to round the mean fare of each group to 2 decimal places.', 'format': '@mean_fare_child[mean_fare
+                            ], @mean_fare_teenager[mean_fare
+                            ], @mean_fare_adult[mean_fare
+                            ], @mean_fare_elderly[mean_fare
+                            ], where "mean_fare" is a float number rounded to 2 decimal places.', 'file_name': 'test_ave.csv', 'case_name': '6'
+                        }, 'expected_output': 'mean_fare_elderly: 43.47, mean_fare_teenager: 31.98, mean_fare_child: 31.09, mean_fare_adult: 35.17', 'output': 'The mean fares for each age group are as follows:\n\n@mean_fare_child[
+                            31.09
+                        ], @mean_fare_teenager[
+                            31.98
+                        ], @mean_fare_adult[
+                            35.17
+                        ], @mean_fare_elderly[
+                            43.47
+                        ]', 'token_usage': {'requests': 5, 'request_tokens': 11458, 'response_tokens': 326, 'total_tokens': 11784
+                        }
+                    }
+                ], 'failures': []
+            }
+        }
+    ]
+}
