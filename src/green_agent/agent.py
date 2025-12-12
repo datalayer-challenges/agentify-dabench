@@ -242,7 +242,7 @@ class GreenWorker(Worker[Context]):
                     'constraints': task.get('constraints', ''),
                     'format': task.get('format', ''),
                     'file_name': task.get('file_name', ''),
-                    'correct_answer': task.get('answer', ''),
+                    'correct_answer': task.get('correct_answer', ''),
                     'concepts': task.get('concepts', []),
                     'level': task.get('level', 'medium')
                 }

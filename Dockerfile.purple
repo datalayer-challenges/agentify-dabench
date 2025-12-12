@@ -16,6 +16,8 @@ WORKDIR /app
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+# Install basic python packages
+RUN pip install --no-cache-dir pandas matplotlib numpy scipy scikit-learn seaborn
 
 # Copy only necessary files for Purple Agent
 COPY src/purple_agent/ ./src/purple_agent/
