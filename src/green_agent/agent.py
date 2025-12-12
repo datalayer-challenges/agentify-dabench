@@ -110,12 +110,15 @@ class GreenWorker(Worker[Context]):
                 new_artifacts=artifacts
             )
             
-            # Emit final artifact and status update - task completed
-            for artifact in artifacts:
+            # Emit final artifact update - task completed
+            if artifacts:
+                
                 await self.broker.send_stream_event(params['id'], {
                     'kind': 'artifact-update',
                     'task_id': params['id'],
-                    'artifact': artifact,
+                    'context_id': task['context_id'],
+                    'artifact': artifacts[0],
+                    'append': False,
                     'final': True
                 })
             
