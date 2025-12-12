@@ -210,7 +210,14 @@ class GreenWorker(Worker[Context]):
         logger.info(f"🔢 Requesting {num_tasks} tasks (quick_sample: {quick_sample})")
         
         # Load tasks from the DABench dataset
-        from ..data_loader import load_dabench_data
+        try:
+            from ..data_loader import load_dabench_data
+        except ImportError:
+            # Fallback for when relative imports fail
+            import sys
+            import os
+            sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+            from data_loader import load_dabench_data
         
         try:
             # Load the dataset
@@ -856,7 +863,7 @@ Here is the question you need to answer:
         return ' '.join(text_parts)
 
 
-def create_green_agent() -> FastA2A:
+def create_green_agent(card_url: str = None) -> FastA2A:
     """Create the green agent with Pydantic Eval."""
     
     # Initialize storage and broker
@@ -881,7 +888,7 @@ def create_green_agent() -> FastA2A:
     import os
     provider = AgentProvider(
         organization=os.getenv("AGENT_ORGANIZATION", "Local"),
-        url=os.getenv("AGENT_PROVIDER_URL", f"http://localhost:{DEFAULT_PORT}")
+        url=os.getenv("AGENT_PROVIDER_URL", card_url or f"http://localhost:{DEFAULT_PORT}")
     )
     
     # Create worker
@@ -904,13 +911,13 @@ def create_green_agent() -> FastA2A:
         finally:
             logger.info("🛑 Green Agent worker stopped")
     
-    # Create app with lifespan
+    # Create app with lifespan - use the card_url parameter
     app = FastA2A(
         storage=storage,
         broker=broker,
         name="Green Agent (Pydantic Eval)",
         description="A2A-compatible green agent that evaluates other agents using benchmark tasks with Pydantic Eval framework",
-        url=f"http://localhost:{DEFAULT_PORT}",
+        url=card_url or f"http://localhost:{DEFAULT_PORT}",  # Use the provided card_url
         version="1.0.0",
         provider=provider,
         skills=[evaluation_skill],
@@ -935,6 +942,10 @@ def main():
     host = args.host
     port = args.port
     card_url = args.card_url or f"http://{host}:{port}"
+    
+    # Set global card URL
+    global CARD_URL
+    CARD_URL = card_url
 
     logger.info("🟢 Starting Green Agent with Pydantic Eval...")
     logger.info(f"📋 Agent Card: {card_url}/.well-known/agent-card.json")
@@ -942,9 +953,12 @@ def main():
     logger.info("🎯 Evaluation Framework: Pydantic Eval with LLM as Judge")
     logger.info(f"🌐 Binding to {host}:{port}")
 
+    # Create a factory function that uses the card_url
+    def create_app():
+        return create_green_agent(card_url)
+
     uvicorn.run(
-        "agent:create_green_agent",
-        factory=True,
+        create_app,
         host=host,
         port=port,
         log_level="info"

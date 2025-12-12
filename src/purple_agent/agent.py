@@ -578,7 +578,7 @@ Your workflow should be:
         return ' '.join(text_parts)
 
 
-def create_purple_agent() -> FastA2A:
+def create_purple_agent(card_url: str = None) -> FastA2A:
     """Create the purple agent with MCP tool capabilities."""
     
     # Initialize storage and broker
@@ -616,10 +616,10 @@ def create_purple_agent() -> FastA2A:
         output_modes=["text/plain", "application/json"]
     )
     
-    # Agent provider
+    # Agent provider - use card_url if provided
     provider = AgentProvider(
         organization=os.getenv("AGENT_ORGANIZATION", "DataAnalysis"),
-        url=os.getenv("AGENT_PROVIDER_URL", "http://localhost:9019")
+        url=os.getenv("AGENT_PROVIDER_URL", card_url or "http://localhost:9019")
     )
     
     # Create worker with Pydantic AI MCP
@@ -644,13 +644,13 @@ def create_purple_agent() -> FastA2A:
                 await worker.start()
                 yield
     
-    # Create FastA2A application
+    # Create FastA2A application - use card_url if provided
     app = FastA2A(
         storage=storage,
         broker=broker,
         name="Purple Agent - Autonomous",
         description="Fully autonomous A2A-compatible agent with AI-driven decision making and MCP tool capabilities",
-        url="http://localhost:9019",
+        url=card_url or "http://localhost:9019",  # Use the provided card_url
         version="2.0.0",
         provider=provider,
         skills=[autonomous_reasoning_skill, computational_skill],
@@ -683,9 +683,12 @@ def main():
     logger.info(f"🔗 A2A Endpoint: {card_url}/")
     logger.info(f"🌐 Binding to {host}:{port}")
     
+    # Create a factory function that uses the card_url
+    def create_app():
+        return create_purple_agent(card_url)
+    
     uvicorn.run(
-        "agent:create_purple_agent",
-        factory=True,
+        create_app,
         host=host,
         port=port,
         log_level="info"
