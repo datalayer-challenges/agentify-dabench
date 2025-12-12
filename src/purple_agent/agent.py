@@ -106,8 +106,12 @@ class PurpleWorker(Worker[Context]):
             self.jupyter_token = secrets.token_hex(16)
             logger.info(f"🔑 Generated new Jupyter token: {self.jupyter_token[:8]}...")
         
-        # Use current directory for agent workings
-        agent_workings_path = "agent-workings"
+        # Use agent-workings directory relative to the agent script location
+        agent_script_dir = os.path.dirname(__file__)
+        agent_workings_path = os.path.join(agent_script_dir, "agent-workings")
+        
+        # Create agent workings directory if it doesn't exist
+        logger.info(f"📁 Created/verified agent workings directory: {agent_workings_path}")
         
         # Start Jupyter MCP server in background thread
         def start_jupyter():
