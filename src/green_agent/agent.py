@@ -77,14 +77,6 @@ class GreenWorker(Worker[Context]):
         logger.info(f"📝 Processing task {params['id']}")
         await self.storage.update_task(task['id'], state='working')
         
-        # Emit status update - task started
-        await self.broker.send_stream_event(params['id'], {
-            'kind': 'status-update',
-            'task_id': params['id'],
-            'status': {'state': 'working'},
-            'final': False
-        })
-        
         try:
             # Load context
             context = await self.storage.load_context(task['context_id']) or []
@@ -97,14 +89,6 @@ class GreenWorker(Worker[Context]):
             if eval_request:
                 # Handle evaluation request using Pydantic Eval
                 logger.info("🔍 Processing evaluation request with Pydantic Eval...")
-                
-                # Emit artifact chunk - evaluation started
-                await self.broker.send_stream_event(params['id'], {
-                    'kind': 'artifact-update',
-                    'task_id': params['id'],
-                    'artifact': {'parts': [{'kind': 'text', 'text': 'Starting Pydantic Eval assessment...'}]},
-                    'append': False
-                })
                 
                 report = await self._evaluate_agent_pydantic(eval_request, task['id'])
                 response_message = self._create_response_message(report)
@@ -119,15 +103,6 @@ class GreenWorker(Worker[Context]):
             context.append(response_message)
             await self.storage.update_context(task['context_id'], context)
             
-            # Emit final artifact chunks
-            for artifact in artifacts:
-                await self.broker.send_stream_event(params['id'], {
-                    'kind': 'artifact-update',
-                    'task_id': params['id'],
-                    'artifact': artifact,
-                    'append': True
-                })
-            
             await self.storage.update_task(
                 task['id'],
                 state='completed',
@@ -135,13 +110,14 @@ class GreenWorker(Worker[Context]):
                 new_artifacts=artifacts
             )
             
-            # Emit final status update - task completed
-            await self.broker.send_stream_event(params['id'], {
-                'kind': 'status-update',
-                'task_id': params['id'],
-                'status': {'state': 'completed'},
-                'final': True
-            })
+            # Emit final artifact and status update - task completed
+            for artifact in artifacts:
+                await self.broker.send_stream_event(params['id'], {
+                    'kind': 'artifact-update',
+                    'task_id': params['id'],
+                    'artifact': artifact,
+                    'final': True
+                })
             
             logger.info(f"✅ Task {task['id']} completed successfully")
             
@@ -166,14 +142,6 @@ class GreenWorker(Worker[Context]):
                     state='failed',
                     new_messages=[error_message]
                 )
-                
-                # Emit error status update
-                await self.broker.send_stream_event(params['id'], {
-                    'kind': 'status-update',
-                    'task_id': params['id'],
-                    'status': {'state': 'failed'},
-                    'final': True
-                })
                 
                 logger.info(f"💾 Task {task['id']} marked as failed")
             except Exception as storage_error:
@@ -348,14 +316,6 @@ Example: "Please evaluate the agent at http://localhost:9019 using these tasks: 
         logger.info(f"🤖 Starting Pydantic Eval assessment of agent at {purple_agent_url}")
         logger.info(f"📝 Evaluating {len(tasks)} tasks")
         
-        # Emit progress update - starting evaluation
-        await self.broker.send_stream_event(task_id, {
-            'kind': 'artifact-update',
-            'task_id': task_id,
-            'artifact': {'parts': [{'kind': 'text', 'text': f'Evaluating {len(tasks)} tasks against agent at {purple_agent_url}...'}]},
-            'append': True
-        })
-        
         # Create timeout configuration for purple agent communication
         import httpx
         timeout = httpx.Timeout(
@@ -377,14 +337,6 @@ Example: "Please evaluate the agent at http://localhost:9019 using these tasks: 
                 format_info = task_data['format']
                 file_name = task_data['file_name']
                 case_name = task_data['case_name']  # Get the case name
-                
-                # Emit progress update - sending task to purple agent
-                await self.broker.send_stream_event(task_id, {
-                    'kind': 'artifact-update',
-                    'task_id': task_id,
-                    'artifact': {'parts': [{'kind': 'text', 'text': f'Sending task "{case_name}" to purple agent...'}]},
-                    'append': True
-                })
                 
                 # Create task prompt for purple agent using DABench format
                 task_prompt = f"""You are an expert data analyst and you will answer the question using the tools at your disposal.
@@ -435,22 +387,9 @@ Here is the question you need to answer:
                     
                     logger.info(f"   ⏳ Waiting for purple agent to complete task...")
                     
-                    # Track wait time for streaming updates
-                    last_update_time = 0
-                    
                     while elapsed_time < max_wait_time:
                         await asyncio.sleep(poll_interval)
                         elapsed_time += poll_interval
-                        
-                        # Send periodic updates every 30 seconds
-                        if elapsed_time - last_update_time >= 30:
-                            await self.broker.send_stream_event(task_id, {
-                                'kind': 'artifact-update',
-                                'task_id': task_id,
-                                'artifact': {'parts': [{'kind': 'text', 'text': f'Waiting for task "{case_name}" completion... ({elapsed_time}s elapsed)'}]},
-                                'append': True
-                            })
-                            last_update_time = elapsed_time
                         await asyncio.sleep(poll_interval)
                         elapsed_time += poll_interval
                         
@@ -465,15 +404,6 @@ Here is the question you need to answer:
                                 
                                 if task_status == 'completed':
                                     logger.info(f"   ✅ Purple agent completed task after {elapsed_time}s")
-                                    
-                                    # Emit completion update
-                                    await self.broker.send_stream_event(task_id, {
-                                        'kind': 'artifact-update',
-                                        'task_id': task_id,
-                                        'artifact': {'parts': [{'kind': 'text', 'text': f'Task "{case_name}" completed in {elapsed_time}s'}]},
-                                        'append': True
-                                    })
-                                    
                                     break
                                 elif task_status == 'failed':
                                     logger.warning(f"   ❌ Purple agent task failed after {elapsed_time}s")
@@ -584,14 +514,6 @@ Here is the question you need to answer:
         
         logger.info(f"🔍 Running Pydantic Eval with {len(cases)} cases and {len(evaluators)} evaluators...")
         
-        # Emit progress update - starting evaluation
-        await self.broker.send_stream_event(task_id, {
-            'kind': 'artifact-update',
-            'task_id': task_id,
-            'artifact': {'parts': [{'kind': 'text', 'text': f'Starting evaluation of {len(cases)} cases with {len(evaluators)} evaluators...'}]},
-            'append': True
-        })
-        
         # Run evaluation with limited concurrency to avoid overwhelming the purple agent
         start_time = time.time()
         try:
@@ -600,14 +522,6 @@ Here is the question you need to answer:
             
             logger.info(f"✅ Pydantic Eval completed in {evaluation_time:.2f} seconds")
             report.print(include_reasons=True, include_output=True, include_expected_output=True)
-            
-            # Emit completion update
-            await self.broker.send_stream_event(task_id, {
-                'kind': 'artifact-update',
-                'task_id': task_id,
-                'artifact': {'parts': [{'kind': 'text', 'text': f'Evaluation completed in {evaluation_time:.2f}s. Saving report...'}]},
-                'append': True
-            })
             
             # Save report to results folder
             await self._save_evaluation_report(report, evaluation_time, len(cases), self.completed_tasks)
