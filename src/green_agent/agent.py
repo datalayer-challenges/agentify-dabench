@@ -77,6 +77,15 @@ class GreenWorker(Worker[Context]):
         logger.info(f"📝 Processing task {params['id']}")
         await self.storage.update_task(task['id'], state='working')
         
+        # Send immediate working status with initial message
+        initial_working_message = Message(
+            role='agent',
+            parts=[TextPart(text="Starting task processing...", kind='text')],
+            kind='message',
+            message_id=str(uuid.uuid4())
+        )
+        await self.storage.update_task(task['id'], state='working', new_messages=[initial_working_message])
+        
         try:
             # Load context
             context = await self.storage.load_context(task['context_id']) or []
@@ -595,119 +604,36 @@ Here is the question you need to answer:
             filename = f"pydantic_eval_report_{timestamp}_{green_model_clean}_vs_{purple_model_clean}_{total_cases}cases.json"
             filepath = os.path.join(results_dir, filename)
             
-            # Extract structured data from EvaluationReport using the proper API
-            if hasattr(report, 'cases') and hasattr(report, 'failures'):
-                # This is a proper EvaluationReport object
-                report_data = {
-                    'name': getattr(report, 'name', 'Unnamed Evaluation'),
-                    'cases': [],
-                    'failures': [],
-                    'experiment_metadata': getattr(report, 'experiment_metadata', None),
-                }
-                
-                # Process successful cases
-                for case in report.cases:
-                    case_data = {
-                        'name': case.name,
-                        'inputs': case.inputs,
-                        'expected_output': case.expected_output,
-                        'output': case.output,
-                        'metadata': case.metadata,
-                    }
-                    
-                    # Find the corresponding completed task for this case and add token usage
-                    task_token_usage = None
-                    if completed_tasks:
-                        # Match by case name (which is the task_id)
-                        for task in completed_tasks:
-                            if case.name == task.get('case_name'):
-                                task_token_usage = self._extract_token_usage(task)
-                                break
-                    
-                    if task_token_usage:
-                        case_data['token_usage'] = task_token_usage
-                        
-                    report_data['cases'].append(case_data)
-                
-                # Process failures
-                for failure in report.failures:
-                    failure_data = {
-                        'name': failure.name,
-                        'inputs': failure.inputs,
-                        'expected_output': failure.expected_output,
-                        'error_message': failure.error_message,
-                        'error_stacktrace': failure.error_stacktrace,
-                        'metadata': failure.metadata,
-                    }
-                    report_data['failures'].append(failure_data)
-                
-                # Calculate summary statistics
-                total_cases_processed = len(report.cases) + len(report.failures)
-                success_count = len(report.cases)
-                success_rate = success_count / total_cases_processed if total_cases_processed > 0 else 0
-                
-                report_data.update({
-                    'total_cases': total_cases_processed,
-                    'successful_cases': success_count,
-                    'failed_cases': len(report.failures),
-                    'success_rate': success_rate,
-                })
-                
-                # Add a nicely formatted table representation
-                if hasattr(report, 'render'):
-                    try:
-                        # Use the render method for a clean, readable text table
-                        formatted_table = report.render(
-                            include_output=True,
-                            include_expected_output=True,
-                            include_reasons=True
-                        )
-                        # Split the table into lines for better JSON readability
-                        report_data['formatted_summary'] = formatted_table.split('\n')
-                    except Exception:
-                        # Fallback if render fails
-                        report_data['formatted_summary'] = str(report).split('\n')
-                else:
-                    report_data['formatted_summary'] = str(report).split('\n')
-                
-            elif hasattr(report, 'model_dump'):
-                # Pydantic v2 style serialization
-                report_data = report.model_dump()
-                success_rate = getattr(report, 'success_rate', None)
-            elif hasattr(report, 'dict'):
-                # Pydantic v1 style serialization
-                report_data = report.dict()
-                success_rate = getattr(report, 'success_rate', None)
-            elif isinstance(report, dict):
-                # Already a dictionary (error case)
-                report_data = report
-                success_rate = report.get('success_rate')
+            # Extract structured data from EvaluationReport using centralized function
+            if hasattr(report, 'cases'):
+                report_data = self._extract_evaluation_summary(report, completed_tasks)
             else:
-                # Fallback - convert to string
-                report_data = {
-                    'report_text': str(report),
-                    'type': str(type(report).__name__)
-                }
-                success_rate = None
+                # Fallback for other report types
+                if isinstance(report, dict):
+                    report_data = report
+                    report_data.setdefault('success_rate', 0.0)
+                else:
+                    report_data = {
+                        'report_text': str(report),
+                        'type': str(type(report).__name__),
+                        'success_rate': 0.0
+                    }
             
-            # Aggregate token usage from completed tasks
+            # Simplify token usage aggregation
             token_usage_summary = {}
             if completed_tasks:
                 token_usage_summary = self._aggregate_token_usage(completed_tasks)
-                logger.info(f"📊 Token usage summary - Total: {token_usage_summary.get('total_tokens', 0)}, "
-                           f"Tasks with usage: {token_usage_summary.get('tasks_with_usage', 0)}")
             
-            # Add our custom metadata
+            # Create final report structure
             evaluation_metadata = {
                 "evaluation_time_seconds": evaluation_time,
                 "total_cases": total_cases,
                 "timestamp": timestamp,
-                "success_rate": report_data.get('success_rate', success_rate),
+                "success_rate": report_data.get('success_rate', 0.0),
                 "generated_by": "Green Agent - Pydantic Eval",
                 "token_usage": token_usage_summary
             }
             
-            # Combine metadata with report
             full_report = {
                 "metadata": evaluation_metadata,
                 "report": report_data
@@ -753,6 +679,113 @@ Here is the question you need to answer:
                                 return text
         
         return None
+
+    def _extract_evaluation_summary(self, report, completed_tasks: List[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Extract standardized evaluation summary from report for both artifacts and JSON saving."""
+        if not hasattr(report, 'cases'):
+            return {
+                'name': getattr(report, 'name', 'Evaluation Report'),
+                'total_cases': 0,
+                'successful_cases': 0,
+                'failed_cases': 0,
+                'success_rate': 0.0,
+                'cases': [],
+                'failures': [],
+                'formatted_summary': str(report).split('\n') if report else []
+            }
+        
+        successful_cases = []
+        failed_cases = []
+        
+        # Process all cases using the correct Pydantic AI API
+        for case in report.cases:
+            case_passed = self._check_case_success(case)
+            
+            case_data = {
+                'name': case.name,
+                'inputs': case.inputs,
+                'expected_output': case.expected_output,
+                'output': case.output,
+                'metadata': case.metadata,
+                'passed': case_passed
+            }
+            
+            # Add token usage if available
+            if completed_tasks:
+                for task in completed_tasks:
+                    if case.name == task.get('case_name'):
+                        task_token_usage = self._extract_token_usage(task)
+                        if task_token_usage:
+                            case_data['token_usage'] = task_token_usage
+                        break
+            
+            if case_passed:
+                successful_cases.append(case_data)
+            else:
+                failed_cases.append(case_data)
+        
+        # Process execution failures (these are always failures)
+        for failure in getattr(report, 'failures', []):
+            failure_data = {
+                'name': failure.name,
+                'inputs': failure.inputs,
+                'expected_output': failure.expected_output,
+                'error_message': failure.error_message,
+                'error_stacktrace': failure.error_stacktrace,
+                'metadata': failure.metadata,
+                'passed': False
+            }
+            failed_cases.append(failure_data)
+        
+        # Calculate summary statistics
+        total_cases = len(successful_cases) + len(failed_cases)
+        success_count = len(successful_cases)
+        success_rate = success_count / total_cases if total_cases > 0 else 0
+        
+        # Generate formatted summary
+        formatted_summary = []
+        if hasattr(report, 'render'):
+            try:
+                formatted_table = report.render(
+                    include_output=True,
+                    include_expected_output=True,
+                    include_reasons=True
+                )
+                formatted_summary = formatted_table.split('\n')
+            except Exception:
+                formatted_summary = str(report).split('\n')
+        else:
+            formatted_summary = str(report).split('\n')
+        
+        return {
+            'name': getattr(report, 'name', 'evaluate_purple_agent'),
+            'total_cases': total_cases,
+            'successful_cases': success_count,
+            'failed_cases': len(failed_cases),
+            'success_rate': success_rate,
+            'cases': successful_cases + failed_cases,  # All cases combined
+            'failures': [],  # Keep empty for backwards compatibility
+            'experiment_metadata': getattr(report, 'experiment_metadata', None),
+            'formatted_summary': formatted_summary
+        }
+
+    def _check_case_success(self, case) -> bool:
+        """Check if a case passed based on evaluation results using proper Pydantic AI API."""
+        # Use the correct Pydantic AI API structure
+        if hasattr(case, 'assertions') and case.assertions:
+            # case.assertions is a dict where values have .value and .reason attributes
+            for assertion_name, result in case.assertions.items():
+                if hasattr(result, 'value') and result.value is True:
+                    return True
+            # If we have assertions but none are True, it failed
+            return False
+        
+        # Fallback: check if output matches expected (simple string comparison)
+        if hasattr(case, 'output') and hasattr(case, 'expected_output'):
+            return str(case.output).strip() == str(case.expected_output).strip()
+        
+        # If we can't determine success, assume failure to be conservative
+        return False
 
     def _extract_token_usage(self, task_result: Dict[str, Any]) -> Optional[Dict[str, int]]:
         """Extract token usage information from task result artifacts."""
@@ -815,83 +848,20 @@ Here is the question you need to answer:
     
     def _create_response_artifacts(self, report) -> List[Artifact]:
         """Create artifacts with Pydantic Eval results."""
-        artifacts = []
-        
-        # Calculate simple metrics from report
-        total_cases = len(getattr(report, 'cases', [])) + len(getattr(report, 'failures', []))
-        successful_cases = len(getattr(report, 'cases', []))
-        metrics = {
-            'total_cases': total_cases,
-            'successful_cases': successful_cases,
-            'failed_cases': len(getattr(report, 'failures', [])),
-            'success_rate': successful_cases / total_cases if total_cases > 0 else 0
-        }
-        
-        # Convert EvaluationReport to serializable format using proper API
-        if hasattr(report, 'cases') and hasattr(report, 'failures'):
-            # This is a proper EvaluationReport object - extract using documented API
-            cases_data = []
-            for case in getattr(report, 'cases', []):
-                case_data = {
-                    'name': case.name,
-                    'inputs': case.inputs,
-                    'expected_output': case.expected_output,
-                    'output': case.output,
-                }
-                
-                # Find the corresponding completed task for this case and add token usage
-                task_token_usage = None
-                if hasattr(self, 'completed_tasks') and self.completed_tasks:
-                    # Match by case name (which is the task_id)
-                    for task in self.completed_tasks:
-                        if case.name == task.get('case_name'):
-                            task_token_usage = self._extract_token_usage(task)
-                            break
-                
-                if task_token_usage:
-                    case_data['token_usage'] = task_token_usage
-                    
-                cases_data.append(case_data)
-            
-            report_data = {
-                'name': getattr(report, 'name', 'Evaluation Report'),
-                'total_cases': len(getattr(report, 'cases', [])) + len(getattr(report, 'failures', [])),
-                'successful_cases': len(getattr(report, 'cases', [])),
-                'failed_cases': len(getattr(report, 'failures', [])),
-                'cases': cases_data,
-                'failures': [
-                    {
-                        'name': failure.name,
-                        'error_message': failure.error_message,
-                        'inputs': failure.inputs,
-                    }
-                    for failure in getattr(report, 'failures', [])
-                ],
-                'metrics': metrics
-            }
-        elif hasattr(report, 'model_dump'):
-            # Pydantic v2 style serialization
-            report_data = report.model_dump()
-        elif hasattr(report, 'dict'):
-            # Pydantic v1 style serialization
-            report_data = report.dict()
-        elif isinstance(report, dict):
-            # Already a dictionary (error case)
-            report_data = report
+        # Use centralized evaluation summary extraction
+        if hasattr(report, 'cases'):
+            report_data = self._extract_evaluation_summary(report, getattr(self, 'completed_tasks', []))
         else:
-            # Fallback - convert to string then wrap in dict
-            report_data = {"report": str(report)}
+            # Fallback for other report types
+            report_data = {"report": str(report), "success_rate": 0.0}
         
-        # Main report artifact
-        report_artifact = Artifact(
+        # Create single artifact with the processed report
+        return [Artifact(
             artifact_id=str(uuid.uuid4()),
             name="pydantic_eval_report",
-            description="Complete Pydantic Eval assessment report",
+            description="Pydantic Eval assessment report with correct success rate",
             parts=[DataPart(data=report_data, kind='data')]
-        )
-        artifacts.append(report_artifact)
-        
-        return artifacts
+        )]
         
     def _extract_text_from_parts(self, parts: List[Any]) -> str:
         """Extract text from message parts."""
