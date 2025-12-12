@@ -211,20 +211,17 @@ class GreenWorker(Worker[Context]):
         
         # Load tasks from the DABench dataset
         try:
-            from ..data_loader import load_dabench_data
+            from ..data_loader import load_dabench_tasks
         except ImportError:
             # Fallback for when relative imports fail
             import sys
             import os
             sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-            from data_loader import load_dabench_data
+            from data_loader import load_dabench_tasks
         
         try:
-            # Load the dataset
-            questions_file = f"{dataset_path}da-dev-questions.jsonl"
-            labels_file = f"{dataset_path}da-dev-labels.jsonl"
-            
-            dataset = load_dabench_data(questions_file, labels_file)
+            # Load the dataset using the data directory
+            dataset = load_dabench_tasks(dataset_path)
             
             # Sample tasks based on configuration
             if quick_sample:
