@@ -116,20 +116,28 @@ class GreenWorker(Worker[Context]):
             
             # Emit final completion event with artifact and status
             if stored_artifacts:
+                # Send artifact update first
                 artifact = stored_artifacts[0]
                 report_data = artifact['parts'][0]['data']
                 
                 await self.broker.send_stream_event(params['id'], {
-                    'kind': 'task-completed',
+                    'kind': 'artifact-update',
                     'task_id': params['id'],
                     'context_id': task['context_id'],
-                    'status': {'state': 'completed'},
                     'artifact': {
                         'artifact_id': artifact['artifact_id'],
                         'name': artifact['name'],
                         'description': artifact['description'],
                         'parts': [{'kind': 'data', 'data': report_data}]
-                    },
+                    }
+                })
+                
+                # Then send final status update
+                await self.broker.send_stream_event(params['id'], {
+                    'kind': 'status-update',
+                    'task_id': params['id'],
+                    'context_id': task['context_id'],
+                    'status': {'state': 'completed'},
                     'final': True
                 })
             else:
