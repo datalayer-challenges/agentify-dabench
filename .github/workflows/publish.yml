@@ -16,9 +16,9 @@ jobs:
       matrix:
         include:
           # Update this to build your own agent images.
-          - name: agentify-dabench-purple
+          - name: purple
             dockerfile: Dockerfile.purple
-          - name: agentify-dabench-green
+          - name: green
             dockerfile: Dockerfile.green
 
     # These permissions are required for the workflow to:
