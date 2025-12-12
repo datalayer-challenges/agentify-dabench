@@ -110,14 +110,33 @@ class GreenWorker(Worker[Context]):
                 new_artifacts=artifacts
             )
             
-            # Emit final status update - task completed
-            await self.broker.send_stream_event(params['id'], {
-                'kind': 'status-update',
-                'task_id': params['id'],
-                'context_id': task['context_id'],
-                'status': {'state': 'completed'},
-                'final': True
-            })
+            # Emit final completion event with artifact and status
+            if artifacts:
+                # Extract the report data from the artifact
+                report_data = artifacts[0].parts[0].data if artifacts[0].parts else {}
+                
+                await self.broker.send_stream_event(params['id'], {
+                    'kind': 'task-completed',
+                    'task_id': params['id'],
+                    'context_id': task['context_id'],
+                    'status': {'state': 'completed'},
+                    'artifact': {
+                        'artifact_id': artifacts[0].artifact_id,
+                        'name': artifacts[0].name,
+                        'description': artifacts[0].description,
+                        'parts': [{'kind': 'data', 'data': report_data}]
+                    },
+                    'final': True
+                })
+            else:
+                # Just status if no artifacts
+                await self.broker.send_stream_event(params['id'], {
+                    'kind': 'status-update',
+                    'task_id': params['id'],
+                    'context_id': task['context_id'],
+                    'status': {'state': 'completed'},
+                    'final': True
+                })
             
             logger.info(f"✅ Task {task['id']} completed successfully")
             
