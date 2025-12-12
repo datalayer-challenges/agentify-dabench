@@ -17,9 +17,9 @@ jobs:
         include:
           # Update this to build your own agent images.
           - name: agentify-dabench-purple
-            dockerfile: Dockefile.purple
+            dockerfile: Dockerfile.purple
           - name: agentify-dabench-green
-            dockerfile: Dockefile.green
+            dockerfile: Dockerfile.green
 
     # These permissions are required for the workflow to:
     # - Read repository contents (checkout code)
