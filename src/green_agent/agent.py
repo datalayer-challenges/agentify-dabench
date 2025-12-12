@@ -100,6 +100,7 @@ class GreenWorker(Worker[Context]):
                 )
                 await self.storage.update_task(
                     task['id'], 
+                    state='working',
                     new_messages=[initial_message]
                 )
                 
@@ -324,7 +325,7 @@ Example: "Please evaluate the agent at http://localhost:9019 using these tasks: 
             kind='message',
             message_id=str(uuid.uuid4())
         )
-        await self.storage.update_task(task_id, new_messages=[progress_message])
+        await self.storage.update_task(task_id, state='working', new_messages=[progress_message])
         
         # Create timeout configuration for purple agent communication
         import httpx
@@ -355,7 +356,8 @@ Example: "Please evaluate the agent at http://localhost:9019 using these tasks: 
                     kind='message',
                     message_id=str(uuid.uuid4())
                 )
-                await self.storage.update_task(task_id, new_messages=[task_progress_message])
+                # Use the correct task_id from the parent scope
+                await self.storage.update_task(task_id, state='working', new_messages=[task_progress_message])
                 
                 # Create task prompt for purple agent using DABench format
                 task_prompt = f"""You are an expert data analyst and you will answer the question using the tools at your disposal.
@@ -397,7 +399,7 @@ Here is the question you need to answer:
                 if 'result' in response:
                     # Get task result
                     agent_task = response['result']
-                    task_id = agent_task['id']
+                    purple_task_id = agent_task['id']
                                         
                     # Wait for completion
                     max_wait_time = 1800  # 30 minutes (total time for task completion)
@@ -411,7 +413,7 @@ Here is the question you need to answer:
                         elapsed_time += poll_interval
                         
                         try:
-                            task_response = await client.get_task(task_id)
+                            task_response = await client.get_task(purple_task_id)
                             
                             if 'result' in task_response:
                                 final_task = task_response['result']
@@ -447,7 +449,7 @@ Here is the question you need to answer:
                     
                     # Get final task result and extract answer
                     try:
-                        task_response = await client.get_task(task_id)
+                        task_response = await client.get_task(purple_task_id)
                     except httpx.ReadTimeout as e:
                         logger.warning(f"   ⏰ Final result timeout after {timeout.read}s")
                         return "[Final result retrieval timeout]"
@@ -538,7 +540,7 @@ Here is the question you need to answer:
             kind='message',
             message_id=str(uuid.uuid4())
         )
-        await self.storage.update_task(task_id, new_messages=[eval_start_message])
+        await self.storage.update_task(task_id, state='working', new_messages=[eval_start_message])
         
         # Run evaluation with limited concurrency to avoid overwhelming the purple agent
         start_time = time.time()
