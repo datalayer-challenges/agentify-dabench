@@ -619,7 +619,7 @@ def create_purple_agent() -> FastA2A:
     # Agent provider
     provider = AgentProvider(
         organization=os.getenv("AGENT_ORGANIZATION", "DataAnalysis"),
-        url=os.getenv("AGENT_PROVIDER_URL", "http://localhost:8001")
+        url=os.getenv("AGENT_PROVIDER_URL", "http://localhost:9019")
     )
     
     # Create worker with Pydantic AI MCP
@@ -650,7 +650,7 @@ def create_purple_agent() -> FastA2A:
         broker=broker,
         name="Purple Agent - Autonomous",
         description="Fully autonomous A2A-compatible agent with AI-driven decision making and MCP tool capabilities",
-        url="http://localhost:8001",
+        url="http://localhost:9019",
         version="2.0.0",
         provider=provider,
         skills=[autonomous_reasoning_skill, computational_skill],
@@ -668,7 +668,7 @@ def main():
     # Parse command line arguments for AgentBeats compatibility
     parser = argparse.ArgumentParser(description="Purple Agent (Test Subject)")
     parser.add_argument("--host", default="0.0.0.0", help="Host address to bind to")
-    parser.add_argument("--port", type=int, default=8001, help="Port to listen on")
+    parser.add_argument("--port", type=int, default=9019, help="Port to listen on")
     parser.add_argument("--card-url", help="URL to advertise in the agent card (optional)")
     args = parser.parse_args()
     

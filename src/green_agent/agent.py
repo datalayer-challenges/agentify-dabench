@@ -36,6 +36,8 @@ dotenv_path = os.path.join(project_root, '.env')
 load_dotenv(dotenv_path)
 print(f"🔧 Green Agent loaded environment variables from {dotenv_path}")
 
+DEFAULT_PORT = 9009
+
 # Import shared utils
 try:
     from ..shared_utils import get_pydantic_ai_model, setup_logger
@@ -286,7 +288,7 @@ To run an evaluation, send me a message with:
 - `purple_agent_url`: URL of the agent to test
 - `tasks`: Array of tasks with questions and correct answers
 
-Example: "Please evaluate the agent at http://localhost:8001 using these tasks: [...]"
+Example: "Please evaluate the agent at http://localhost:9019 using these tasks: [...]"
 """
         else:
             response_text = f"I received your message: '{user_text}'. I'm specialized in evaluating AI agents using benchmark tasks with Pydantic Eval. Would you like me to run an evaluation?"
@@ -879,7 +881,7 @@ def create_green_agent() -> FastA2A:
     import os
     provider = AgentProvider(
         organization=os.getenv("AGENT_ORGANIZATION", "Local"),
-        url=os.getenv("AGENT_PROVIDER_URL", "http://localhost:8000")
+        url=os.getenv("AGENT_PROVIDER_URL", f"http://localhost:{DEFAULT_PORT}")
     )
     
     # Create worker
@@ -908,7 +910,7 @@ def create_green_agent() -> FastA2A:
         broker=broker,
         name="Green Agent (Pydantic Eval)",
         description="A2A-compatible green agent that evaluates other agents using benchmark tasks with Pydantic Eval framework",
-        url="http://localhost:8000",
+        url=f"http://localhost:{DEFAULT_PORT}",
         version="1.0.0",
         provider=provider,
         skills=[evaluation_skill],
@@ -926,20 +928,20 @@ def main():
     # Parse command line arguments for AgentBeats compatibility
     parser = argparse.ArgumentParser(description="Green Agent (Evaluator)")
     parser.add_argument("--host", default="0.0.0.0", help="Host address to bind to")
-    parser.add_argument("--port", type=int, default=8000, help="Port to listen on")
+    parser.add_argument("--port", type=int, default=9009, help="Port to listen on")
     parser.add_argument("--card-url", help="URL to advertise in the agent card (optional)")
     args = parser.parse_args()
     
     host = args.host
     port = args.port
     card_url = args.card_url or f"http://{host}:{port}"
-    
+
     logger.info("🟢 Starting Green Agent with Pydantic Eval...")
     logger.info(f"📋 Agent Card: {card_url}/.well-known/agent-card.json")
     logger.info(f"🔗 A2A Endpoint: {card_url}/")
     logger.info("🎯 Evaluation Framework: Pydantic Eval with LLM as Judge")
     logger.info(f"🌐 Binding to {host}:{port}")
-    
+
     uvicorn.run(
         "agent:create_green_agent",
         factory=True,

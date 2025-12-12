@@ -2,13 +2,13 @@
 # This TOML file configures the DABench evaluation scenario for AgentBeats
 
 [green_agent]
-endpoint = "http://127.0.0.1:8000"
-cmd = "python src/green_agent/agent.py --host 127.0.0.1 --port 8000"
+endpoint = "http://127.0.0.1:9009"
+cmd = "python src/green_agent/agent.py --host 127.0.0.1 --port 9009"
 
 [[participants]]
 role = "data_analyst"
-endpoint = "http://127.0.0.1:8001"  
-cmd = "python src/purple_agent/agent.py --host 127.0.0.1 --port 8001"
+endpoint = "http://127.0.0.1:9019"  
+cmd = "python src/purple_agent/agent.py --host 127.0.0.1 --port 9019"
 
 [config]
 # DABench evaluation configuration

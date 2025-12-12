@@ -16,7 +16,7 @@ from fasta2a.client import A2AClient
 from fasta2a.schema import Message, TextPart, DataPart
 from src.data_loader import get_sample_tasks, load_dabench_tasks
 
-async def send_evaluation_request(green_url="http://localhost:8000", purple_url="http://localhost:8001", num_tasks=3, monitor=False, use_agentbeats_format=False):
+async def send_evaluation_request(green_url="http://localhost:9009", purple_url="http://localhost:9019", num_tasks=3, monitor=False, use_agentbeats_format=False):
     """Send evaluation request to green agent."""
     try:
         if use_agentbeats_format:
@@ -192,8 +192,8 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(description='Send evaluation request to green agent')
-    parser.add_argument('--green-url', default='http://localhost:8000', help='Green agent URL')
-    parser.add_argument('--purple-url', default='http://localhost:8001', help='Purple agent URL')
+    parser.add_argument('--green-url', default='http://localhost:9009', help='Green agent URL')
+    parser.add_argument('--purple-url', default='http://localhost:9019', help='Purple agent URL')
     parser.add_argument('--tasks', type=int, default=3, help='Number of tasks to evaluate (0 = full dataset)')
     parser.add_argument('--monitor', action='store_true', help='Keep monitoring evaluation progress (keeps terminal busy)')
     parser.add_argument('--agentbeats', action='store_true', help='Use new AgentBeats format instead of legacy format')

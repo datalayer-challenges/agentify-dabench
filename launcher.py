@@ -49,8 +49,8 @@ class Launcher:
     def __init__(self, log_dir: Path):
         self.green_process: Optional[subprocess.Popen] = None
         self.purple_process: Optional[subprocess.Popen] = None
-        self.green_port = 8000
-        self.purple_port = 8001
+        self.green_port = 9009
+        self.purple_port = 9019
         self.jupyter_port = 8888  # For reference only - purple agent manages its own Jupyter
         self.jupyter_token: Optional[str] = None
         self.log_dir = log_dir

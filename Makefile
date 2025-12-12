@@ -12,8 +12,8 @@ LOGS_DIR := logs
 
 # Ports (matching launcher.py)
 JUPYTER_PORT := 8888
-GREEN_PORT := 8000
-PURPLE_PORT := 8001
+GREEN_PORT := 9009
+PURPLE_PORT := 9019
 
 # Log directory with timestamp
 LOG_DIR := $(LOGS_DIR)/run_$(shell date +%Y%m%d_%H%M%S)
@@ -101,7 +101,7 @@ docker-start-purple: ## Start Purple Agent with embedded MCP in foreground (macO
 	@$(DOCKER_RUN) --rm -it \
 		--env-file .env \
 		-p 8888:8888 \
-		-p 8001:8001 \
+		-p 9019:9019 \
 		-v $(PWD)/src/purple_agent/agent-workings:/app/agent-workings \
 		-v $(PWD)/logs:/app/logs \
 		-v $(PWD)/results:/app/results \
@@ -112,7 +112,7 @@ docker-start-green: ## Start Green Agent in foreground (macOS - keeps terminal b
 	@echo "$(BLUE)🐳 Starting Green Agent in Docker (macOS)...$(RESET)"
 	@$(DOCKER_RUN) --rm -it \
 		--env-file .env \
-		-p 8000:8000 \
+		-p 9009:9009 \
 		-v $(PWD)/logs:/app/logs \
 		-v $(PWD)/results:/app/results \
 		-v $(PWD)/data-dabench:/app/data-dabench \
@@ -120,11 +120,11 @@ docker-start-green: ## Start Green Agent in foreground (macOS - keeps terminal b
 
 docker-run-eval-monitor: ## Send evaluation request to Docker containers with monitoring (macOS)
 	@echo "$(BLUE)🐳🔍 Sending full evaluation to Docker containers with monitoring (macOS)...$(RESET)"
-	@$(PYTHON) send_evaluation.py --tasks 0 --monitor --green-url http://localhost:8000 --purple-url http://host.docker.internal:8001
+	@$(PYTHON) send_evaluation.py --tasks 0 --monitor --green-url http://localhost:9009 --purple-url http://host.docker.internal:9019
 
 docker-run-eval-quick-monitor: ## Send quick evaluation request to Docker containers with monitoring (macOS)
 	@echo "$(BLUE)🐳⚡ Sending quick evaluation to Docker containers with monitoring (macOS)...$(RESET)"
-	@$(PYTHON) send_evaluation.py --tasks 3 --monitor --green-url http://localhost:8000 --purple-url http://host.docker.internal:8001
+	@$(PYTHON) send_evaluation.py --tasks 3 --monitor --green-url http://localhost:9009 --purple-url http://host.docker.internal:9019
 
 # ============================================================================
 # Linux Docker Commands (embedded MCP in purple agent)
@@ -154,8 +154,8 @@ docker-start-green-linux: ## Start Green Agent in foreground (Linux - keeps term
 
 docker-run-eval-monitor-linux: ## Send evaluation request to Docker containers with monitoring (Linux)
 	@echo "$(BLUE)🐳🔍 Sending full evaluation to Docker containers with monitoring (Linux)...$(RESET)"
-	@$(PYTHON) send_evaluation.py --tasks 0 --monitor --green-url http://localhost:8000 --purple-url http://localhost:8001
+	@$(PYTHON) send_evaluation.py --tasks 0 --monitor --green-url http://localhost:9009 --purple-url http://localhost:9019
 
 docker-run-eval-quick-monitor-linux: ## Send quick evaluation request to Docker containers with monitoring (Linux)
 	@echo "$(BLUE)🐳⚡ Sending quick evaluation to Docker containers with monitoring (Linux)...$(RESET)"
-	@$(PYTHON) send_evaluation.py --tasks 3 --monitor --green-url http://localhost:8000 --purple-url http://localhost:8001
+	@$(PYTHON) send_evaluation.py --tasks 3 --monitor --green-url http://localhost:9009 --purple-url http://localhost:9019

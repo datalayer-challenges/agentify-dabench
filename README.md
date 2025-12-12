@@ -143,7 +143,7 @@ await self._start_embedded_jupyter_mcp()
 ```
 
 #### Network Configuration
-- **Agent Port**: 8001 (Purple Agent A2A endpoint)
+- **Agent Port**: 9019 (Purple Agent A2A endpoint)
 - **Embedded MCP Port**: 8888 (JupyterLab standard)
 - **MCP Endpoints**: `http://localhost:8888/mcp/*`
 - **Health Check**: `http://localhost:8888/mcp/healthz`
