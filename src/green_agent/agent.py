@@ -550,6 +550,9 @@ Here is the question you need to answer:
             duration = time.time() - start_time
             evaluation_time = start_time  # Store when evaluation started, not duration
             
+            # Store duration immediately for use in artifacts
+            self.duration = duration
+            
             logger.info(f"✅ Pydantic Eval completed in {duration:.2f} seconds")
             report.print(include_reasons=True, include_output=True, include_expected_output=True)
             
@@ -562,6 +565,9 @@ Here is the question you need to answer:
         except Exception as e:
             logger.error(f"❌ Pydantic Eval failed: {e}")
             logger.error(f"📍 Traceback: {traceback.format_exc()}")
+            
+            # Set duration to 0 for failed evaluations
+            self.duration = 0
             
             return {
                 'success': False,
@@ -594,8 +600,6 @@ Here is the question you need to answer:
             filename = f"pydantic_eval_report_{timestamp}_{green_model_clean}_vs_{purple_model_clean}_{total_cases}cases.json"
             filepath = os.path.join(results_dir, filename)
             
-            # Store evaluation duration for use in _extract_evaluation_summary
-            self.duration = time.time() - evaluation_time
             
             # Extract structured data from EvaluationReport using centralized function
             if hasattr(report, 'cases'):
