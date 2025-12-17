@@ -20,6 +20,8 @@ This project implements the [DABench](https://github.com/InfiAgent/InfiAgent/tre
 - ✅ **AgentBeats Architecture**: Proper green/purple agent separation as per [AgentBeats](https://rdi.berkeley.edu/agentx-agentbeats) guidelines
 - ✅ **DABench Scoring**: [DABench](https://github.com/InfiAgent/InfiAgent/tree/main/examples/DA-Agent/data) benchmark dataset 
 - ✅ **PydanticA AI Agent and Evaluation**: Utilizes [Pydantic AI](https://ai.pydantic.dev/evals/evaluators/llm-judge/) for agent and evaluation
+- ✅ **LLM-as-Judge Evaluation**: Green Agent uses GPT-4o (Azure OpenAI or OpenAI) as an LLM judge to evaluate Purple Agent responses
+- ✅ **Configurable Purple Agent**: Purple Agent model is fully configurable via `PURPLE_AGENT_MODEL` environment variable (supports OpenAI, Azure, Anthropic, Bedrock, etc.)
 - ✅ **Embedded MCP Tools**: Purple agent includes embedded [jupyter-mcp-server](https://github.com/datalayer/jupyter-mcp-server) for autonomous code execution
 
 ## AgentBeats Usage
@@ -39,23 +41,45 @@ More details on AgentBeats submission can be found in: https://docs.agentbeats.d
 The system uses environment variables for configuration. Copy `.env.template` to `.env` and configure:
 
 ```bash
-# LLM Configuration - Pydantic AI supports multiple providers
-LLM_API_KEY=your_api_key_here
+# Model Configuration
+# Green Agent: Always uses GPT-4o (auto-detects Azure vs OpenAI based on available keys)
+# Purple Agent: Configurable via PURPLE_AGENT_MODEL (supports multiple providers)
 
-# Model Configuration (specify provider explicitly using Pydantic AI format)
-GREEN_AGENT_MODEL=openai:gpt-4o             # OpenAI format: openai:model_name
-PURPLE_AGENT_MODEL=openai:gpt-4o             # OpenAI format: openai:model_name
+PURPLE_AGENT_MODEL=openai:gpt-4o            # Purple Agent model (configurable)
 
-# Alternative provider examples:
-# GREEN_AGENT_MODEL=azure:gpt-4             # Azure OpenAI (requires endpoint below)
-# GREEN_AGENT_MODEL=anthropic:claude-3-sonnet # Anthropic Claude
-# GREEN_AGENT_MODEL=gemini:gemini-pro       # Google Gemini
-# GREEN_AGENT_MODEL=groq:llama3-70b         # Groq
+# Alternative Purple Agent provider examples:
+# PURPLE_AGENT_MODEL=azure:gpt-4             # Azure OpenAI (requires endpoint below)
+# PURPLE_AGENT_MODEL=anthropic:claude-3-sonnet # Anthropic Claude
+# PURPLE_AGENT_MODEL=bedrock:anthropic.claude-sonnet-4-5-20250929-v1:0 # AWS Bedrock
+# PURPLE_AGENT_MODEL=gemini:gemini-pro       # Google Gemini
+# PURPLE_AGENT_MODEL=groq:llama3-70b         # Groq
 
 # Azure OpenAI Configuration (when using azure: models)
+AZURE_OPENAI_API_KEY=your_azure_openai_api_key
 AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
-AZURE_OPENAI_API_VERSION=2024-06-01
+OPENAI_API_VERSION=2024-06-01
+
+# OpenAI Configuration (when using openai: models)
+OPENAI_API_KEY=your_openai_api_key
+
+# AWS Bedrock Configuration (when using bedrock: models)
+AWS_ACCESS_KEY_ID=your_aws_access_key
+AWS_SECRET_ACCESS_KEY=your_aws_secret_key
+AWS_DEFAULT_REGION=us-east-1
 ```
+
+#### Model Selection Logic
+
+- **Green Agent (Evaluator)**: 
+  - Always uses `gpt-4o` for consistent evaluation via LLM-as-judge
+  - Automatically selects `azure:gpt-4o` if `AZURE_OPENAI_API_KEY` is available
+  - Falls back to `openai:gpt-4o` if `OPENAI_API_KEY` is available
+  - This ensures consistent scoring across evaluations
+
+- **Purple Agent (Test Subject)**:
+  - Fully configurable via `PURPLE_AGENT_MODEL` environment variable
+  - Supports OpenAI, Azure OpenAI, Anthropic, AWS Bedrock, Google Gemini, Groq
+  - Allows testing different models while maintaining evaluation consistency
 
 ### Option 1: All-in-One Launcher Script
 

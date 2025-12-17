@@ -214,7 +214,7 @@ Your workflow should be:
 1. Connect to notebook.ipynb using use_notebook tool with mode="connect" 
 2. Load and examine relevant datasets using execute_code or insert_execute_code_cell
 3. Perform analysis step by step with execute_code or by inserting and executing cells
-4. Provide a concise final answer based on your analysis
+4. Provide a concise final answer following the format imposed. Only return the final answer, no explanations.
 """)
             logger.info("✅ Pydantic AI MCP agent setup complete")
             
