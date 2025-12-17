@@ -19,6 +19,7 @@ import traceback
 import uuid
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
+from datetime import datetime
 
 # Third-party imports
 import httpx
@@ -553,7 +554,7 @@ Here is the question you need to answer:
             report.print(include_reasons=True, include_output=True, include_expected_output=True)
             
             # Save report to results folder
-            await self._save_evaluation_report(report, evaluation_time, len(cases), self.completed_tasks)
+            await self._save_evaluation_report(report, evaluation_time, len(cases), self.completed_tasks, duration)
             
             # Return the report object directly
             return report
@@ -569,10 +570,9 @@ Here is the question you need to answer:
                 'total_cases': len(cases)
             }
     
-    async def _save_evaluation_report(self, report, evaluation_time: float, total_cases: int, completed_tasks: List[Dict[str, Any]] = None) -> None:
+    async def _save_evaluation_report(self, report, evaluation_time: float, total_cases: int, completed_tasks: List[Dict[str, Any]] = None, duration: float = None) -> None:
         """Save the pydantic evaluation report to a results folder."""
         try:
-            from datetime import datetime
             
             # Create results directory if it doesn't exist
             project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
@@ -594,11 +594,8 @@ Here is the question you need to answer:
             filename = f"pydantic_eval_report_{timestamp}_{green_model_clean}_vs_{purple_model_clean}_{total_cases}cases.json"
             filepath = os.path.join(results_dir, filename)
             
-            # Store evaluation time for use in _extract_evaluation_summary
-            self._last_evaluation_time = evaluation_time
-            
-            # Calculate duration for metadata
-            duration = time.time() - evaluation_time
+            # Store evaluation duration for use in _extract_evaluation_summary
+            self.duration = time.time() - evaluation_time
             
             # Extract structured data from EvaluationReport using centralized function
             if hasattr(report, 'cases'):
@@ -623,7 +620,7 @@ Here is the question you need to answer:
             # Create final report structure
             evaluation_metadata = {
                 "evaluation_start_time": evaluation_time,  # When the evaluation started
-                "evaluation_duration_seconds": duration,  # How long it took
+                "evaluation_duration_seconds": self.duration,  # How long it took
                 "total_cases": total_cases,
                 "timestamp": timestamp,
                 "success_rate": report_data.get('success_rate', 0.0),
@@ -685,9 +682,8 @@ Here is the question you need to answer:
         if purple_agent_model:
             metadata['purple_agent_model'] = purple_agent_model
         
-        evaluation_start_time = getattr(self, '_last_evaluation_time', None)
-        if evaluation_start_time is not None:
-            evaluation_duration = time.time() - evaluation_start_time
+        evaluation_duration = getattr(self, 'duration', None)
+        if evaluation_duration is not None:
             metadata['evaluation_duration_seconds'] = evaluation_duration
             
         return metadata
@@ -924,7 +920,6 @@ def create_green_agent(card_url: str = None) -> FastA2A:
     )
     
     # Agent provider - configurable via environment
-    import os
     provider = AgentProvider(
         organization=os.getenv("AGENT_ORGANIZATION", "Local"),
         url=os.getenv("AGENT_PROVIDER_URL", card_url or f"http://localhost:{DEFAULT_PORT}")
