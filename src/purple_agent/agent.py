@@ -9,13 +9,24 @@ This agent:
 5. Demonstrates A2A-compatible agent capabilities with proper MCP integration
 """
 
+# Standard library imports
+import argparse
 import asyncio
-import uuid
 import os
+import secrets
+import subprocess
 import sys
-from typing import Any, List
+import threading
+import traceback
+import uuid
 from contextlib import asynccontextmanager
+from typing import Any, List
 
+# Third-party imports
+import uvicorn
+from dotenv import load_dotenv
+
+# FastA2A imports
 from fasta2a import FastA2A, Skill, Worker
 from fasta2a.broker import InMemoryBroker
 from fasta2a.storage import InMemoryStorage
@@ -29,25 +40,18 @@ from pydantic_ai.mcp import MCPServerStreamableHTTP
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 
-# Jupyter MCP server for embedded startup
-import subprocess
-import threading
-import time
+# Shared utilities
+try:
+    from ..shared_utils import get_pydantic_ai_model, setup_logger
+except ImportError:
+    sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+    from shared_utils import get_pydantic_ai_model, setup_logger
 
-from dotenv import load_dotenv
+# Load environment variables
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 dotenv_path = os.path.join(project_root, '.env')
 load_dotenv(dotenv_path)
 print(f"🔧 Purple Agent loaded environment variables from {dotenv_path}")
-
-
-# Import shared utilities
-try:
-    from ..shared_utils import get_pydantic_ai_model, setup_logger
-except ImportError:
-    # Fallback for when running as script
-    sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-    from shared_utils import get_pydantic_ai_model, setup_logger
 
 # Setup logger
 logger = setup_logger("purple_agent")
@@ -102,7 +106,6 @@ class PurpleWorker(Worker[Context]):
         
         # Generate token if not provided
         if not self.jupyter_token:
-            import secrets
             self.jupyter_token = secrets.token_hex(16)
             logger.info(f"🔑 Generated new Jupyter token: {self.jupyter_token[:8]}...")
         
@@ -218,7 +221,6 @@ Your workflow should be:
         except Exception as e:
             logger.error(f"❌ Failed to setup Pydantic AI MCP agent: {e}")
             logger.error(f"🔍 Error type: {type(e)}")
-            import traceback
             logger.error(traceback.format_exc())
             self.agent = None
     
@@ -286,7 +288,6 @@ Your workflow should be:
             
         except Exception as e:
             logger.error(f"❌ Failed to clear notebook: {e}")
-            import traceback
             logger.error(traceback.format_exc())
             # Continue anyway - the AI can still work
     
@@ -452,7 +453,6 @@ Your workflow should be:
             except Exception as e:
                 logger.error(f"❌ Pydantic AI execution failed: {e}")
                 logger.error(f"🔍 Error type: {type(e)}")
-                import traceback
                 logger.error(traceback.format_exc())
                 answer = f"Error during AI processing: {str(e)}"
                 usage_info = None  # No usage info available for failed executions
@@ -478,7 +478,6 @@ Your workflow should be:
             
         except Exception as e:
             logger.error(f"❌ Task processing failed: {e}")
-            import traceback
             logger.error(traceback.format_exc())
             
             # Handle errors
@@ -662,8 +661,6 @@ def create_purple_agent(card_url: str = None) -> FastA2A:
 
 def main():
     """Main entry point for the autonomous purple agent."""
-    import argparse
-    import uvicorn
     
     # Parse command line arguments for AgentBeats compatibility
     parser = argparse.ArgumentParser(description="Purple Agent (Test Subject)")

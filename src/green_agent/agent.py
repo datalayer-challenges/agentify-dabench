@@ -8,45 +8,48 @@ This agent:
 4. Returns pydantic eval report as results
 """
 
-import json
-import uuid
-import time
+# Standard library imports
+import argparse
 import asyncio
-from typing import Any, Dict, List, Optional
+import json
+import os
+import sys
+import time
+import traceback
+import uuid
 from contextlib import asynccontextmanager
+from typing import Any, Dict, List, Optional
 
+# Third-party imports
+import httpx
+import uvicorn
+from dotenv import load_dotenv
+
+# FastA2A imports
 from fasta2a import FastA2A, Skill, Worker
 from fasta2a.broker import InMemoryBroker
 from fasta2a.storage import InMemoryStorage
 from fasta2a.schema import Artifact, Message, TaskIdParams, TaskSendParams, TextPart, DataPart, AgentProvider
 from fasta2a.client import A2AClient
 
+# Pydantic Eval imports
 from pydantic_evals import Case, Dataset
-from pydantic_evals.evaluators import LLMJudge, Contains, EqualsExpected
+from pydantic_evals.evaluators import LLMJudge
 
-import sys
-import os
-
+# Shared utilities
+try:
+    from ..shared_utils import get_pydantic_ai_model, setup_logger
+except ImportError:
+    sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+    from shared_utils import get_pydantic_ai_model, setup_logger
 
 # Load environment variables from .env file
-from dotenv import load_dotenv
-# Load from project root
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 dotenv_path = os.path.join(project_root, '.env')
 load_dotenv(dotenv_path)
 print(f"🔧 Green Agent loaded environment variables from {dotenv_path}")
 
 DEFAULT_PORT = 9009
-
-# Import shared utils
-try:
-    from ..shared_utils import get_pydantic_ai_model, setup_logger
-except ImportError:
-    # Fallback for when running as script
-    import sys
-    import os
-    sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-    from shared_utils import get_pydantic_ai_model, setup_logger
 
 # Setup logger
 logger = setup_logger("green_agent")
@@ -155,7 +158,6 @@ class GreenWorker(Worker[Context]):
         except Exception as e:
             logger.error(f"❌ Error in task {task['id']}: {e}")
             logger.error(f"📍 Exception type: {type(e).__name__}")
-            import traceback
             logger.error(f"📍 Traceback: {traceback.format_exc()}")
             
             # Handle errors
@@ -257,9 +259,6 @@ class GreenWorker(Worker[Context]):
         try:
             from ..data_loader import load_dabench_tasks
         except ImportError:
-            # Fallback for when relative imports fail
-            import sys
-            import os
             sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
             from data_loader import load_dabench_tasks
         
@@ -348,7 +347,6 @@ Example: "Please evaluate the agent at http://localhost:9019 using these tasks: 
         logger.info(f"📝 Evaluating {len(tasks)} tasks")
         
         # Create timeout configuration for purple agent communication
-        import httpx
         timeout = httpx.Timeout(
             connect=30.0,   # Connection timeout: 30 seconds
             read=1800.0,     # Read timeout: 30 minutes (data analysis can take time)
@@ -497,7 +495,6 @@ Here is the question you need to answer:
             except Exception as e:
                 logger.error(f"   ❌ Exception during purple agent evaluation: {e}")
                 logger.error(f"   🔍 Exception type: {type(e).__name__}")
-                import traceback
                 logger.error(f"   📍 Full traceback: {traceback.format_exc()}")
                 return f"[Error: {str(e)}]"
             finally:
@@ -563,7 +560,6 @@ Here is the question you need to answer:
             
         except Exception as e:
             logger.error(f"❌ Pydantic Eval failed: {e}")
-            import traceback
             logger.error(f"📍 Traceback: {traceback.format_exc()}")
             
             return {
@@ -576,7 +572,6 @@ Here is the question you need to answer:
     async def _save_evaluation_report(self, report, evaluation_time: float, total_cases: int, completed_tasks: List[Dict[str, Any]] = None) -> None:
         """Save the pydantic evaluation report to a results folder."""
         try:
-            import os
             from datetime import datetime
             
             # Create results directory if it doesn't exist
@@ -684,7 +679,6 @@ Here is the question you need to answer:
 
     def _get_evaluation_metadata(self) -> Dict[str, Any]:
         """Get evaluation metadata including purple agent model and duration."""
-        import os
         metadata = {}
         
         purple_agent_model = os.getenv("PURPLE_AGENT_MODEL")
@@ -950,7 +944,6 @@ def create_green_agent(card_url: str = None) -> FastA2A:
                     yield
         except Exception as e:
             logger.error(f"❌ Failed to start Green Agent worker: {e}")
-            import traceback
             logger.error(f"📍 Traceback: {traceback.format_exc()}")
             raise
         finally:
@@ -975,8 +968,6 @@ def create_green_agent(card_url: str = None) -> FastA2A:
 
 def main():
     """Main entry point for the green agent."""
-    import argparse
-    import uvicorn
     
     # Parse command line arguments for AgentBeats compatibility
     parser = argparse.ArgumentParser(description="Green Agent (Evaluator)")
