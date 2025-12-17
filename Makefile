@@ -74,23 +74,6 @@ docker-build-all: ## Build all Docker images
 	@$(DOCKER_BUILD) -f Dockerfile.green -t agentbeats-green:latest .
 	@echo "$(GREEN)✅ All Docker images built successfully$(RESET)"
 
-docker-build-agentbeats: ## Build Docker images for AgentBeats deployment (linux/amd64)
-	@echo "$(BLUE)🐳 Building AgentBeats-compatible Docker images (linux/amd64)...$(RESET)"
-	@echo "$(YELLOW)📦 Building Green Agent...$(RESET)"
-	@docker build --platform linux/amd64 -f Dockerfile.green -t ghcr.io/$(USER)/agentify-dab-step-green:latest .
-	@echo "$(YELLOW)📦 Building Purple Agent (with embedded MCP)...$(RESET)"  
-	@docker build --platform linux/amd64 -f Dockerfile.purple -t ghcr.io/$(USER)/agentify-dab-step-purple:latest .
-	@echo "$(GREEN)✅ All AgentBeats-compatible images built successfully$(RESET)"
-	@echo "$(CYAN)🚀 Ready to push to GitHub Container Registry:$(RESET)"
-	@echo "  docker push ghcr.io/$(USER)/agentify-dab-step-green:latest"
-	@echo "  docker push ghcr.io/$(USER)/agentify-dab-step-purple:latest"
-
-docker-push-agentbeats: ## Push AgentBeats images to GitHub Container Registry
-	@echo "$(BLUE)🐳 Pushing AgentBeats images to GitHub Container Registry...$(RESET)"
-	@docker push ghcr.io/$(USER)/agentify-dab-step-green:latest
-	@docker push ghcr.io/$(USER)/agentify-dab-step-purple:latest
-	@echo "$(GREEN)✅ All images pushed successfully$(RESET)"
-
 # ============================================================================
 # macOS Docker Commands (default - embedded MCP in purple agent)
 # ============================================================================

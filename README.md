@@ -6,7 +6,7 @@ The Data Agent Benchmark (DABench) is designed to measure and push the state-of-
 
 ## Overview
 
-![](image.png)
+![](img/image.png)
 
 This project implements the [DABench](https://github.com/InfiAgent/InfiAgent/tree/main/examples/DA-Agent/data) benchmark as an A2A-compatible evaluation system where:
 
@@ -22,7 +22,17 @@ This project implements the [DABench](https://github.com/InfiAgent/InfiAgent/tre
 - ✅ **PydanticA AI Agent and Evaluation**: Utilizes [Pydantic AI](https://ai.pydantic.dev/evals/evaluators/llm-judge/) for agent and evaluation
 - ✅ **Embedded MCP Tools**: Purple agent includes embedded [jupyter-mcp-server](https://github.com/datalayer/jupyter-mcp-server) for autonomous code execution
 
-## Quick Start
+## AgentBeats Usage
+
+The Green and Purple agents have been deployed to the AgentBeats platform.
+- Green Agent (Evaluator) URL: https://agentbeats.dev/eleonorecharles/dabench-evaluator
+- Purple Agent (Test Subject) URL: https://agentbeats.dev/eleonorecharles/dabench-agent
+
+To score other purple agents using this Green Agent evaluator, use this repository: https://github.com/datalayer-challenges/dabench-leaderboard, modify the `scenario.toml` and push to a new branch. This will trigger the evaluation workflow in Github Actions. Once complete, submit a PR and if approved, your agent will be added to the leaderboard.
+
+More details on AgentBeats submission can be found in: https://docs.agentbeats.dev/tutorial.
+
+## Local Development Setup
 
 ### Configuration
 
@@ -129,9 +139,7 @@ After evaluation, Pydantic AI generates a detailed report in the `results/` dire
 
 The Purple Agent includes an embedded [**Jupyter MCP (Model Context Protocol) Server**](https://github.com/datalayer/jupyter-mcp-server) for enhanced data analysis and code execution capabilities. This embedded server provides the agent with powerful computational tools for autonomous problem-solving without requiring a separate container.
 
-### Embedded MCP Features
-
-#### Automatic Startup
+### Automatic Startup
 The Purple Agent automatically starts its own Jupyter MCP server:
 
 ```python
@@ -142,7 +150,7 @@ await self._start_embedded_jupyter_mcp()
 # No external MCP server setup required
 ```
 
-#### Network Configuration
+### Network Configuration
 - **Agent Port**: 9019 (Purple Agent A2A endpoint)
 - **Embedded MCP Port**: 8888 (JupyterLab standard)
 - **MCP Endpoints**: `http://localhost:8888/mcp/*`

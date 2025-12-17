@@ -549,9 +549,10 @@ Here is the question you need to answer:
         start_time = time.time()
         try:
             report = await dataset.evaluate(evaluate_purple_agent, max_concurrency=1)
-            evaluation_time = time.time() - start_time
+            duration = time.time() - start_time
+            evaluation_time = start_time  # Store when evaluation started, not duration
             
-            logger.info(f"✅ Pydantic Eval completed in {evaluation_time:.2f} seconds")
+            logger.info(f"✅ Pydantic Eval completed in {duration:.2f} seconds")
             report.print(include_reasons=True, include_output=True, include_expected_output=True)
             
             # Save report to results folder
@@ -568,7 +569,7 @@ Here is the question you need to answer:
             return {
                 'success': False,
                 'error': str(e),
-                'evaluation_time': time.time() - start_time,
+                'evaluation_time': start_time,  # Store start time even for failures
                 'total_cases': len(cases)
             }
     
@@ -598,6 +599,12 @@ Here is the question you need to answer:
             filename = f"pydantic_eval_report_{timestamp}_{green_model_clean}_vs_{purple_model_clean}_{total_cases}cases.json"
             filepath = os.path.join(results_dir, filename)
             
+            # Store evaluation time for use in _extract_evaluation_summary
+            self._last_evaluation_time = evaluation_time
+            
+            # Calculate duration for metadata
+            duration = time.time() - evaluation_time
+            
             # Extract structured data from EvaluationReport using centralized function
             if hasattr(report, 'cases'):
                 report_data = self._extract_evaluation_summary(report, completed_tasks)
@@ -620,7 +627,8 @@ Here is the question you need to answer:
             
             # Create final report structure
             evaluation_metadata = {
-                "evaluation_time_seconds": evaluation_time,
+                "evaluation_start_time": evaluation_time,  # When the evaluation started
+                "evaluation_duration_seconds": duration,  # How long it took
                 "total_cases": total_cases,
                 "timestamp": timestamp,
                 "success_rate": report_data.get('success_rate', 0.0),
@@ -674,27 +682,30 @@ Here is the question you need to answer:
         
         return None
 
-    def _extract_evaluation_summary(self, report, completed_tasks: List[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """Extract standardized evaluation summary from report for both artifacts and JSON saving."""
-        if not hasattr(report, 'cases'):
-            return {
-                'name': getattr(report, 'name', 'Evaluation Report'),
-                'total_cases': 0,
-                'successful_cases': 0,
-                'failed_cases': 0,
-                'success_rate': 0.0,
-                'cases': [],
-                'failures': [],
-                'formatted_summary': str(report).split('\n') if report else []
-            }
+    def _get_evaluation_metadata(self) -> Dict[str, Any]:
+        """Get evaluation metadata including purple agent model and duration."""
+        import os
+        metadata = {}
         
+        purple_agent_model = os.getenv("PURPLE_AGENT_MODEL")
+        if purple_agent_model:
+            metadata['purple_agent_model'] = purple_agent_model
+        
+        evaluation_start_time = getattr(self, '_last_evaluation_time', None)
+        if evaluation_start_time is not None:
+            evaluation_duration = time.time() - evaluation_start_time
+            metadata['evaluation_duration_seconds'] = evaluation_duration
+            
+        return metadata
+
+    def _process_report_cases(self, report, completed_tasks: List[Dict[str, Any]]) -> tuple:
+        """Process report cases and return successful/failed cases lists."""
         successful_cases = []
         failed_cases = []
         
-        # Process all cases using the correct Pydantic AI API
+        # Process evaluation cases
         for case in report.cases:
             case_passed = self._check_case_success(case)
-            
             case_data = {
                 'name': case.name,
                 'inputs': case.inputs,
@@ -718,7 +729,7 @@ Here is the question you need to answer:
             else:
                 failed_cases.append(case_data)
         
-        # Process execution failures (these are always failures)
+        # Process execution failures
         for failure in getattr(report, 'failures', []):
             failure_data = {
                 'name': failure.name,
@@ -730,14 +741,11 @@ Here is the question you need to answer:
                 'passed': False
             }
             failed_cases.append(failure_data)
-        
-        # Calculate summary statistics
-        total_cases = len(successful_cases) + len(failed_cases)
-        success_count = len(successful_cases)
-        success_rate = success_count / total_cases if total_cases > 0 else 0
-        
-        # Generate formatted summary
-        formatted_summary = []
+            
+        return successful_cases, failed_cases
+
+    def _generate_formatted_summary(self, report) -> List[str]:
+        """Generate formatted summary from report."""
         if hasattr(report, 'render'):
             try:
                 formatted_table = report.render(
@@ -745,23 +753,57 @@ Here is the question you need to answer:
                     include_expected_output=True,
                     include_reasons=True
                 )
-                formatted_summary = formatted_table.split('\n')
+                return formatted_table.split('\n')
             except Exception:
-                formatted_summary = str(report).split('\n')
+                return str(report).split('\n')
         else:
-            formatted_summary = str(report).split('\n')
+            return str(report).split('\n')
+
+    def _extract_evaluation_summary(self, report, completed_tasks: List[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Extract standardized evaluation summary from report for both artifacts and JSON saving."""
+        # Get evaluation metadata
+        metadata = self._get_evaluation_metadata()
         
-        return {
+        # Base summary structure
+        base_summary = {
+            'name': getattr(report, 'name', 'Evaluation Report'),
+            'total_cases': 0,
+            'successful_cases': 0,
+            'failed_cases': 0,
+            'success_rate': 0.0,
+            'cases': [],
+            'failures': [],
+            'formatted_summary': str(report).split('\n') if report else []
+        }
+        base_summary.update(metadata)
+        
+        # Handle reports without cases
+        if not hasattr(report, 'cases'):
+            return base_summary
+        
+        # Process cases
+        successful_cases, failed_cases = self._process_report_cases(report, completed_tasks)
+        
+        # Calculate statistics
+        total_cases = len(successful_cases) + len(failed_cases)
+        success_count = len(successful_cases)
+        success_rate = success_count / total_cases if total_cases > 0 else 0
+        
+        # Build final summary
+        summary = {
             'name': getattr(report, 'name', 'evaluate_purple_agent'),
             'total_cases': total_cases,
             'successful_cases': success_count,
             'failed_cases': len(failed_cases),
             'success_rate': success_rate,
-            'cases': successful_cases + failed_cases,  # All cases combined
+            'cases': successful_cases + failed_cases,
             'failures': [],  # Keep empty for backwards compatibility
             'experiment_metadata': getattr(report, 'experiment_metadata', None),
-            'formatted_summary': formatted_summary
+            'formatted_summary': self._generate_formatted_summary(report)
         }
+        summary.update(metadata)
+        
+        return summary
 
     def _check_case_success(self, case) -> bool:
         """Check if a case passed based on evaluation results using proper Pydantic AI API."""
