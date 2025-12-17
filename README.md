@@ -12,7 +12,6 @@ This project implements the [DABench](https://github.com/InfiAgent/InfiAgent/tre
 
 - **Green Agent** (Evaluator): Manages DABench assessments and evaluates other agents
 - **Purple Agent** (Test Subject): The agent being evaluated, with embedded Jupyter MCP capabilities
-- **Launcher**: One-command execution script for easy setup and evaluation
 
 ## Features
 
