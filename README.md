@@ -2,6 +2,10 @@
 
 A complete A2A (Agent-to-Agent) compatible implementation of the [DABench](https://github.com/InfiAgent/InfiAgent/tree/main/examples/DA-Agent/data) benchmark, following the [AgentBeats](https://rdi.berkeley.edu/agentx-agentbeats) methodology with Green Agent (evaluator) and Purple Agent (test subject) architecture.
 
+<p align="center">
+  <img src="img/agents.png" alt="Agents Architecture" width="400">
+</p>
+
 The Data Agent Benchmark (DABench) is designed to measure and push the state-of-the-art in **Data Analysis tasks** for AI agents.
 
 ## Overview
