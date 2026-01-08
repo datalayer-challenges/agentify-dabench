@@ -822,7 +822,7 @@ Here is the question you need to answer:
         return None
 
     def _get_evaluation_metadata(self) -> Dict[str, Any]:
-        """Get evaluation metadata including purple agent model and duration."""
+        """Get evaluation metadata including purple agent model, duration, and token usage."""
         metadata = {}
         
         purple_agent_model = os.getenv("PURPLE_AGENT_MODEL")
@@ -832,6 +832,12 @@ Here is the question you need to answer:
         evaluation_duration = getattr(self, 'duration', None)
         if evaluation_duration is not None:
             metadata['evaluation_duration_seconds'] = evaluation_duration
+        
+        # Add aggregated token usage
+        if hasattr(self, 'completed_tasks'):
+            token_usage_summary = self._aggregate_token_usage(self.completed_tasks)
+            metadata['token_usage'] = token_usage_summary
+            logger.info(f"🪙 Adding token usage to metadata: {token_usage_summary}")
             
         return metadata
 
@@ -961,7 +967,12 @@ Here is the question you need to answer:
         return False
 
     def _extract_token_usage(self, task_result: Dict[str, Any]) -> Optional[Dict[str, int]]:
-        """Extract token usage information from task result artifacts."""
+        """Extract token usage information from task result."""
+        # First check if token_usage is directly on the task (from streaming)
+        if 'token_usage' in task_result:
+            return task_result['token_usage']
+        
+        # Fallback: check in artifacts for compatibility
         if 'artifacts' in task_result:
             for artifact in task_result['artifacts']:
                 for part in artifact.get('parts', []):
