@@ -36,6 +36,7 @@ from fasta2a.client import A2AClient
 # Pydantic Eval imports
 from pydantic_evals import Case, Dataset
 from pydantic_evals.evaluators import LLMJudge
+from pydantic_ai.settings import ModelSettings
 
 # Shared utilities
 try:
@@ -609,10 +610,11 @@ Here is the question you need to answer:
         
         evaluators.append(
             LLMJudge(
-                rubric="Response is accurate",
+                rubric="Ensure the response provides the same answer as the expected output and adheres to the specified format. The response must follow the format even if the expected output does not.",
                 include_input=True,
                 include_expected_output=True,
-                model=self.pydantic_ai_model
+                model=self.pydantic_ai_model,
+                model_settings=ModelSettings(temperature=0.0)  # Deterministic evaluation
             )
         )
         
