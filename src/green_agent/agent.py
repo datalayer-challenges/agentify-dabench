@@ -592,7 +592,7 @@ Here is the question you need to answer:
             
             case = Case(
                 name=task['task_id'],
-                inputs={'question': task['question'], 'constraints': task['constraints'], 'format': task['format'], 'file_name': task['file_name'], 'case_name': task['task_id']},  # Add case_name to inputs
+                inputs={'question': task['question'], 'constraints': task['constraints'], 'format': task['format'], 'file_name': task['file_name'], 'case_name': task['task_id']},  
                 expected_output=task['correct_answer'],
                 metadata={
                     'level': task['level'],
@@ -605,15 +605,15 @@ Here is the question you need to answer:
         # Create evaluators
         evaluators = []
         
-        # Add LLM Judge evaluator
-
-        
+        # Add LLM Judge evaluator     
         evaluators.append(
             LLMJudge(
                 rubric="""
                 A response is considered correct if and only if:
-                1. The value(s) in the output match those in "expected_output".
-                2. The output strictly follows the "format" specification.
+                1. The value(s) in the model output match the value(s) in 'expected_output'.
+                Note: 'expected_output' may not follow the formal format; only the value(s) are used for comparison.
+                2. The output strictly follows the 'format' specification provided in the input.
+                All placeholders, symbols, and separators defined in 'format' must be present.
                 Both value correctness and format compliance are required for a pass.
                 """,
                 include_input=True,
