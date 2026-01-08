@@ -610,7 +610,12 @@ Here is the question you need to answer:
         
         evaluators.append(
             LLMJudge(
-                rubric="Ensure the response provides the same answer as the expected output and adheres to the specified format. The response must follow the format even if the expected output does not.",
+                rubric="""
+                A response is considered correct if and only if:
+                1. The value(s) in the response match those in "expected_output".
+                2. The response strictly follows the "format" specification.
+                Both value correctness and format compliance are required for a pass.
+                """
                 include_input=True,
                 include_expected_output=True,
                 model=self.pydantic_ai_model,
