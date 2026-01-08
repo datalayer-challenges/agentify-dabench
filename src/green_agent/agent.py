@@ -467,6 +467,7 @@ Here is the question you need to answer:
                     # Stream the response
                     final_task = None
                     agent_answer = None
+                    token_usage_info = None
                     
                     async with http_client.stream('POST', purple_agent_url, json=stream_payload) as response:
                         if response.status_code != 200:
@@ -484,6 +485,11 @@ Here is the question you need to answer:
                                         state = status.get('state', 'unknown')
                                         metadata = event.get('metadata', {})
                                         message = metadata.get('message', '')
+                                        
+                                        # Extract token usage from metadata if available
+                                        if 'token_usage' in metadata:
+                                            token_usage_info = metadata['token_usage']
+                                            logger.info(f"   🪙 Token usage: {token_usage_info}")
                                         
                                         logger.info(f"   📊 Purple agent: {state} - {message}")
                                         
@@ -520,12 +526,18 @@ Here is the question you need to answer:
                                                     logger.info(f"   💬 Got agent response from artifact text: {agent_answer[:100]}...")
                                             elif part.get('kind') == 'data':
                                                 data = part.get('data', {})
-                                                if isinstance(data, dict) and 'answer' in data:
-                                                    data_answer = str(data['answer']).strip()
-                                                    if data_answer and not agent_answer:
-                                                        agent_answer = data_answer
-                                                        logger.info(f"   💬 Got agent response from artifact data: {agent_answer[:100]}...")
-                                                        break
+                                                if isinstance(data, dict):
+                                                    # Extract answer
+                                                    if 'answer' in data and not agent_answer:
+                                                        data_answer = str(data['answer']).strip()
+                                                        if data_answer:
+                                                            agent_answer = data_answer
+                                                            logger.info(f"   💬 Got agent response from artifact data: {agent_answer[:100]}...")
+                                                    
+                                                    # Extract token usage if available
+                                                    if 'token_usage' in data:
+                                                        token_usage_info = data['token_usage']
+                                                        logger.info(f"   🪙 Token usage from artifact: {token_usage_info}")
                                     
                                 except json.JSONDecodeError as e:
                                     logger.warning(f"   ⚠️ Failed to parse streaming data: {e}")
@@ -536,6 +548,12 @@ Here is the question you need to answer:
                         if final_task:
                             final_task_with_id = dict(final_task)
                             final_task_with_id['case_name'] = case_name
+                            
+                            # Add token usage information if we collected it
+                            if token_usage_info:
+                                final_task_with_id['token_usage'] = token_usage_info
+                                logger.info(f"   📊 Storing token usage for task: {token_usage_info}")
+                            
                             self.completed_tasks.append(final_task_with_id)
                         
                         return agent_answer
