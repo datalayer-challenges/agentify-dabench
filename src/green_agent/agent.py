@@ -615,7 +615,7 @@ Here is the question you need to answer:
                 1. The value(s) in the output match those in "expected_output".
                 2. The output strictly follows the "format" specification.
                 Both value correctness and format compliance are required for a pass.
-                """
+                """,
                 include_input=True,
                 include_expected_output=True,
                 model=self.pydantic_ai_model,
