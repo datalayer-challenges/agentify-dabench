@@ -610,11 +610,11 @@ Here is the question you need to answer:
             LLMJudge(
                 rubric="""
                 A response is considered correct if and only if:
-                1. The value(s) in the model output match the value(s) in 'expected_output'.
-                Note: 'expected_output' may not follow the formal format; only the value(s) are used for comparison.
-                2. The output strictly follows the 'format' specification provided in the input.
-                All placeholders, symbols, and separators defined in 'format' must be present.
-                Both value correctness and format compliance are required for a pass.
+                1. The value(s) in the output match the value(s) specified in the expected_output.
+                2. The output follow the 'format' specification provided in the input.
+                Note: 'expected_output' may not follow the formal format. 
+                Do not treat a mismatch between 'expected_output' and the format as a failure; 
+                only use it to check that the values match.
                 """,
                 include_input=True,
                 include_expected_output=True,
