@@ -1,4 +1,4 @@
-git+https://github.com/eleonorecharles/fasta2a.git@feature/sse-streaming
+git+https://github.com/datalayer-externals/fasta2a.git@feature/sse-streaming-2
 uvicorn>=0.24.0
 httpx>=0.25.0
 pydantic>=2.0.0

@@ -81,6 +81,16 @@ class GreenWorker(Worker[Context]):
         logger.info(f"📝 Processing task {params['id']}")
         await self.storage.update_task(task['id'], state='working')
         
+        # Send initial status update
+        await self.broker.send_stream_event(params['id'], {
+            'kind': 'status-update',
+            'task_id': params['id'],
+            'context_id': task['context_id'],
+            'status': {'state': 'working'},
+            'final': False,
+            'metadata': {'message': 'Starting evaluation task...'}
+        })
+        
         try:
             # Load context
             context = await self.storage.load_context(task['context_id']) or []
@@ -91,6 +101,18 @@ class GreenWorker(Worker[Context]):
             eval_request = self._extract_evaluation_request(message)
             
             if eval_request:
+                # Send evaluation processing status
+                await self.broker.send_stream_event(params['id'], {
+                    'kind': 'status-update',
+                    'task_id': params['id'],
+                    'context_id': task['context_id'],
+                    'status': {'state': 'working'},
+                    'final': False,
+                    'metadata': {
+                        'message': f'Processing {len(eval_request["tasks"])} evaluation tasks with Pydantic Eval...'
+                    }
+                })
+                
                 # Handle evaluation request using Pydantic Eval
                 logger.info("🔍 Processing evaluation request with Pydantic Eval...")
                 
@@ -98,6 +120,16 @@ class GreenWorker(Worker[Context]):
                 response_message = self._create_response_message(report)
                 artifacts = self._create_response_artifacts(report)
             else:
+                # Send simple message processing status
+                await self.broker.send_stream_event(params['id'], {
+                    'kind': 'status-update',
+                    'task_id': params['id'],
+                    'context_id': task['context_id'],
+                    'status': {'state': 'working'},
+                    'final': False,
+                    'metadata': {'message': 'Processing simple message...'}
+                })
+                
                 # Handle simple message (like "hello")
                 logger.info("💬 Processing simple message...")
                 response_message = await self._handle_simple_message(message)
@@ -160,6 +192,19 @@ class GreenWorker(Worker[Context]):
             logger.error(f"❌ Error in task {task['id']}: {e}")
             logger.error(f"📍 Exception type: {type(e).__name__}")
             logger.error(f"📍 Traceback: {traceback.format_exc()}")
+            
+            # Send error status update
+            await self.broker.send_stream_event(params['id'], {
+                'kind': 'status-update',
+                'task_id': params['id'],
+                'context_id': task['context_id'],
+                'status': {'state': 'failed'},
+                'final': True,
+                'metadata': {
+                    'message': f'Evaluation failed: {str(e)}',
+                    'error': str(e)
+                }
+            })
             
             # Handle errors
             error_message = Message(
@@ -347,6 +392,19 @@ Example: "Please evaluate the agent at http://localhost:9019 using these tasks: 
         logger.info(f"🤖 Starting Pydantic Eval assessment of agent at {purple_agent_url}")
         logger.info(f"📝 Evaluating {len(tasks)} tasks")
         
+        # Send progress update for evaluation setup
+        await self.broker.send_stream_event(task_id, {
+            'kind': 'status-update',
+            'task_id': task_id,
+            'context_id': task_id,  # Using task_id as fallback for context_id
+            'status': {'state': 'working'},
+            'final': False,
+            'metadata': {
+                'message': f'Setting up evaluation for {len(tasks)} tasks...',
+                'progress': {'current': 0, 'total': len(tasks), 'phase': 'setup'}
+            }
+        })
+        
         # Create timeout configuration for purple agent communication
         timeout = httpx.Timeout(
             connect=30.0,   # Connection timeout: 30 seconds
@@ -384,109 +442,114 @@ Here is the question you need to answer:
                 client = A2AClient(base_url=purple_agent_url, http_client=http_client)
                 
                 # Create task message for purple agent
-                task_message = Message(
-                    role='user',
-                    parts=[TextPart(
-                        text=task_prompt,
-                        kind='text'
-                    )],
-                    kind='message',
-                    message_id=str(uuid.uuid4())
-                )
+                message_id = str(uuid.uuid4())
                 logger.info(f"   📤 Sending task to purple agent: {question[:50]}{'...' if len(question) > 50 else ''}")
                 
-                # Send task to purple agent
+                # Use streaming message endpoint instead of send_message
                 try:
-                    response = await client.send_message(task_message)
-                except httpx.ReadTimeout as e:
-                    logger.warning(f"   ⏰ Timeout sending message after {timeout.read}s")
-                    return "[Timeout during message sending]"
-                except Exception as e:
-                    logger.error(f"   ❌ Error sending message: {e}")
-                    return f"[Error sending message: {e}]"
-                                
-                if 'result' in response:
-                    # Get task result
-                    agent_task = response['result']
-                    purple_task_id = agent_task['id']
+                    # Prepare streaming request
+                    stream_payload = {
+                        'jsonrpc': '2.0',
+                        'id': str(uuid.uuid4()),
+                        'method': 'message/stream',
+                        'params': {
+                            'message': {
+                                'role': 'user',
+                                'parts': [{'kind': 'text', 'text': task_prompt}],
+                                'kind': 'message',
+                                'messageId': message_id
+                            }
+                        }
+                    }
+                    
+                    logger.info(f"   📡 Using streaming endpoint for real-time updates...")
+                    
+                    # Stream the response
+                    final_task = None
+                    agent_answer = None
+                    
+                    async with http_client.stream('POST', purple_agent_url, json=stream_payload) as response:
+                        if response.status_code != 200:
+                            logger.error(f"   ❌ Streaming request failed: {response.status_code}")
+                            return f"[Streaming request failed: {response.status_code}]"
+                        
+                        async for line in response.aiter_lines():
+                            if line.startswith('data: '):
+                                try:
+                                    data = json.loads(line[6:])
+                                    event = data.get('result', {})
+                                    
+                                    if event.get('kind') == 'status-update':
+                                        status = event.get('status', {})
+                                        state = status.get('state', 'unknown')
+                                        metadata = event.get('metadata', {})
+                                        message = metadata.get('message', '')
                                         
-                    # Wait for completion
-                    max_wait_time = 1800  # 30 minutes (total time for task completion)
-                    poll_interval = 10   # Check every 10 seconds
-                    elapsed_time = 0
-                    
-                    logger.info(f"   ⏳ Waiting for purple agent to complete task...")
-                    
-                    while elapsed_time < max_wait_time:
-                        await asyncio.sleep(poll_interval)
-                        elapsed_time += poll_interval
-                        await asyncio.sleep(poll_interval)
-                        elapsed_time += poll_interval
-                        
-                        try:
-                            task_response = await client.get_task(purple_task_id)
-                            
-                            if 'result' in task_response:
-                                final_task = task_response['result']
-                                task_status = final_task.get('status', {}).get('state', 'unknown')
-                                
-                                logger.info(f"   📊 Task status: {task_status} (elapsed: {elapsed_time}s)")
-                                
-                                if task_status == 'completed':
-                                    logger.info(f"   ✅ Purple agent completed task after {elapsed_time}s")
-                                    break
-                                elif task_status == 'failed':
-                                    logger.warning(f"   ❌ Purple agent task failed after {elapsed_time}s")
-                                    return f"[Task failed: {task_status}]"
-                                elif task_status in ['working', 'submitted']:
-                                    continue  # Keep waiting
-                                else:
-                                    logger.warning(f"   ⚠️ Unknown task status: {task_status}")
-                                    break
-                            else:
-                                logger.error(f"   ❌ Failed to get purple agent task status: {task_response}")
-                                return "[Failed to get task status]"
-                        except httpx.ReadTimeout as e:
-                            logger.warning(f"   ⏰ Status check timeout after {timeout.read}s (elapsed: {elapsed_time}s)")
-                            logger.info(f"   💭 Purple agent may be overloaded - continuing to wait...")
-                            continue  # Keep trying
-                        except Exception as e:
-                            logger.warning(f"   ⚠️ Error checking purple agent status: {e}")
-                            continue
-                    
-                    if elapsed_time >= max_wait_time:
-                        logger.warning(f"   ⏰ Purple agent task timed out after {max_wait_time}s")
-                        return "[Task timed out]"
-                    
-                    # Get final task result and extract answer
-                    try:
-                        task_response = await client.get_task(purple_task_id)
-                    except httpx.ReadTimeout as e:
-                        logger.warning(f"   ⏰ Final result timeout after {timeout.read}s")
-                        return "[Final result retrieval timeout]"
+                                        logger.info(f"   📊 Purple agent: {state} - {message}")
                                         
-                    if 'result' in task_response:
-                        final_task = task_response['result']
+                                        if event.get('final', False) and state == 'completed':
+                                            logger.info(f"   ✅ Purple agent completed task")
+                                            # We'll get the final result from the completed task event
+                                            break
+                                    
+                                    elif event.get('kind') == 'task':
+                                        final_task = event
+                                        purple_task_id = event.get('id')
+                                        logger.info(f"   🆔 Got task ID: {purple_task_id}")
+                                    
+                                    elif event.get('kind') == 'message' and event.get('role') == 'agent':
+                                        # Extract the agent's answer from the message
+                                        parts = event.get('parts', [])
+                                        for part in parts:
+                                            if part.get('kind') == 'text':
+                                                agent_answer = part.get('text', '')
+                                                logger.info(f"   💬 Got agent response from message: {agent_answer[:100]}...")
+                                                break
+                                    
+                                    elif event.get('kind') == 'artifact-update':
+                                        # Extract the agent's answer from the artifact
+                                        artifact = event.get('artifact', {})
+                                        logger.info(f"   📎 Received artifact: {artifact.get('name', 'unknown')}")
+                                        
+                                        # Look for answer in artifact parts
+                                        for part in artifact.get('parts', []):
+                                            if part.get('kind') == 'text':
+                                                text_answer = part.get('text', '').strip()
+                                                if text_answer and not agent_answer:
+                                                    agent_answer = text_answer
+                                                    logger.info(f"   💬 Got agent response from artifact text: {agent_answer[:100]}...")
+                                            elif part.get('kind') == 'data':
+                                                data = part.get('data', {})
+                                                if isinstance(data, dict) and 'answer' in data:
+                                                    data_answer = str(data['answer']).strip()
+                                                    if data_answer and not agent_answer:
+                                                        agent_answer = data_answer
+                                                        logger.info(f"   💬 Got agent response from artifact data: {agent_answer[:100]}...")
+                                                        break
+                                    
+                                except json.JSONDecodeError as e:
+                                    logger.warning(f"   ⚠️ Failed to parse streaming data: {e}")
+                                    continue
+                    
+                    if agent_answer:
+                        # Store completed task info for token usage aggregation
+                        if final_task:
+                            final_task_with_id = dict(final_task)
+                            final_task_with_id['case_name'] = case_name
+                            self.completed_tasks.append(final_task_with_id)
                         
-                        # Store completed task with case name for token usage aggregation
-                        final_task_with_id = dict(final_task)
-                        final_task_with_id['case_name'] = case_name  # Use the case name from inputs
-                        self.completed_tasks.append(final_task_with_id)
-                        
-                        # Use the outer self reference
-                        agent_answer = self._extract_agent_answer(final_task)
-                        
-                        if agent_answer:
-                            logger.info(f"   💬 Purple agent answered: '{agent_answer[:100]}{'...' if len(agent_answer) > 100 else ''}'")
-                            return agent_answer
-                        else:
-                            logger.warning(f"   ⚠️ Could not extract answer from purple agent response")
-                            logger.warning(f"   🔍 Final task structure: {list(final_task.keys()) if isinstance(final_task, dict) else type(final_task)}")
-                            return "[No answer extracted]"
+                        return agent_answer
                     else:
-                        error = task_response.get('error', 'Unknown error')
-                        logger.error(f"   ❌ Purple agent task failed: {error}")
-                        return f"[Task failed: {error}]"
+                        logger.warning(f"   ⚠️ No answer received from streaming response")
+                        return "[No answer received from streaming]"
+                        
+                except httpx.ReadTimeout as e:
+                    logger.warning(f"   ⏰ Streaming timeout after {timeout.read}s")
+                    return "[Streaming timeout]"
+                    
+                except Exception as e:
+                    logger.error(f"   ❌ Error in streaming communication: {e}")
+                    return f"[Streaming communication error: {e}]"
                 else:
                     error = response.get('error', 'Unknown error')
                     logger.error(f"   ❌ Failed to send message to purple agent: {error}")
@@ -543,15 +606,77 @@ Here is the question you need to answer:
         
         logger.info(f"🔍 Running Pydantic Eval with {len(cases)} cases and {len(evaluators)} evaluators...")
         
+        # Send evaluation start progress update  
+        await self.broker.send_stream_event(task_id, {
+            'kind': 'status-update',
+            'task_id': task_id,
+            'context_id': task_id,
+            'status': {'state': 'working'},
+            'final': False,
+            'metadata': {
+                'message': f'Starting evaluation of {len(cases)} tasks...',
+                'progress': {'current': 0, 'total': len(cases), 'phase': 'evaluation'}
+            }
+        })
+        
+        # Create a wrapper function to track progress during evaluation
+        evaluation_progress = {'completed': 0}
+        
+        async def evaluate_purple_agent_with_progress(task_input: dict) -> str:
+            """Wrapper around the evaluation function that sends progress updates."""
+            try:
+                # Call the original evaluation function
+                result = await evaluate_purple_agent(task_input)
+                
+                # Update progress
+                evaluation_progress['completed'] += 1
+                
+                # Send progress update
+                await self.broker.send_stream_event(task_id, {
+                    'kind': 'status-update',
+                    'task_id': task_id,
+                    'context_id': task_id,
+                    'status': {'state': 'working'},
+                    'final': False,
+                    'metadata': {
+                        'message': f'Completed {evaluation_progress["completed"]}/{len(cases)} tasks',
+                        'progress': {
+                            'current': evaluation_progress['completed'], 
+                            'total': len(cases), 
+                            'phase': 'evaluation'
+                        }
+                    }
+                })
+                
+                return result
+            except Exception as e:
+                evaluation_progress['completed'] += 1
+                logger.error(f"❌ Task evaluation failed: {e}")
+                return f"[Error: {str(e)}]"
+        
         # Run evaluation with limited concurrency to avoid overwhelming the purple agent
         start_time = time.time()
         try:
-            report = await dataset.evaluate(evaluate_purple_agent, max_concurrency=1)
+            report = await dataset.evaluate(evaluate_purple_agent_with_progress, max_concurrency=1)
             duration = time.time() - start_time
             evaluation_time = start_time  # Store when evaluation started, not duration
             
             # Store duration immediately for use in artifacts
             self.duration = duration
+            
+            # Send final evaluation completion update
+            await self.broker.send_stream_event(task_id, {
+                'kind': 'status-update',
+                'task_id': task_id,
+                'context_id': task_id,
+                'status': {'state': 'working'},
+                'final': False,
+                'metadata': {
+                    'message': f'Evaluation completed! Processed {len(cases)} tasks in {duration:.2f}s',
+                    'progress': {'current': len(cases), 'total': len(cases), 'phase': 'completed'},
+                    'duration': duration
+                }
+            })
             
             logger.info(f"✅ Pydantic Eval completed in {duration:.2f} seconds")
             report.print(include_reasons=True, include_output=True, include_expected_output=True)

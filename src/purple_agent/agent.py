@@ -408,6 +408,16 @@ Your workflow should be:
         logger.info(f"✅ Task loaded: {task}")
         await self.storage.update_task(task['id'], state='working')
         
+        # Send initial status update
+        await self.broker.send_stream_event(params['id'], {
+            'kind': 'status-update',
+            'task_id': params['id'],
+            'context_id': task['context_id'],
+            'status': {'state': 'working'},
+            'final': False,
+            'metadata': {'message': 'Starting task processing...'}
+        })
+        
         try:
             # Load context
             context = await self.storage.load_context(task['context_id']) or []
@@ -417,8 +427,31 @@ Your workflow should be:
             message = params['message']
             logger.info(f"📨 Received message: {message}")
         
+            # Send preparation status
+            await self.broker.send_stream_event(params['id'], {
+                'kind': 'status-update', 
+                'task_id': params['id'],
+                'context_id': task['context_id'],
+                'status': {'state': 'working'},
+                'final': False,
+                'metadata': {'message': 'Preparing workspace and tools...'}
+            })
+        
             # Capture initial file state for cleanup
             await self._capture_initial_files()
+            
+            # Send workspace preparation completion
+            await self.broker.send_stream_event(params['id'], {
+                'kind': 'status-update',
+                'task_id': params['id'],
+                'context_id': task['context_id'],
+                'status': {'state': 'working'},
+                'final': False,
+                'metadata': {'message': 'Workspace prepared, clearing notebook for fresh analysis...'}
+            })
+            
+            # Clear the notebook for fresh task execution
+            await self._clear_notebook_for_task()
             
             # Process question using Pydantic AI with MCP tools
             if not self.agent:
@@ -426,6 +459,16 @@ Your workflow should be:
                 
             logger.info(f"🤖 Processing with Pydantic AI agent...")
             logger.info(f"🚀 Starting agent execution...")
+            
+            # Send AI processing status
+            await self.broker.send_stream_event(params['id'], {
+                'kind': 'status-update',
+                'task_id': params['id'], 
+                'context_id': task['context_id'],
+                'status': {'state': 'working'},
+                'final': False,
+                'metadata': {'message': 'Running AI analysis with MCP tools...'}
+            })
             
             try:
                 # Execute the agent directly - same as test_simple_agent.py
@@ -450,6 +493,19 @@ Your workflow should be:
                            f"Input: {usage.request_tokens}, Output: {usage.response_tokens}, "
                            f"Total: {usage.total_tokens}")
                 
+                # Send processing completion status
+                await self.broker.send_stream_event(params['id'], {
+                    'kind': 'status-update',
+                    'task_id': params['id'],
+                    'context_id': task['context_id'], 
+                    'status': {'state': 'working'},
+                    'final': False,
+                    'metadata': {
+                        'message': 'AI analysis complete, preparing results...',
+                        'token_usage': usage_info
+                    }
+                })
+                
             except Exception as e:
                 logger.error(f"❌ Pydantic AI execution failed: {e}")
                 logger.error(f"🔍 Error type: {type(e)}")
@@ -470,7 +526,51 @@ Your workflow should be:
                 new_messages=[response_message],
                 new_artifacts=artifacts
             )
+            
+            # Send artifact update first if artifacts exist
+            if artifacts:
+                # Get stored artifacts after task completion (serialized to dicts by framework)
+                stored_task = await self.storage.load_task(task['id'])
+                stored_artifacts = stored_task.get('artifacts', []) if stored_task else []
+                
+                if stored_artifacts:
+                    artifact = stored_artifacts[0]
+                    await self.broker.send_stream_event(params['id'], {
+                        'kind': 'artifact-update',
+                        'task_id': params['id'],
+                        'context_id': task['context_id'],
+                        'artifact': {
+                            'artifact_id': artifact['artifact_id'],
+                            'name': artifact['name'],
+                            'description': artifact['description'],
+                            'parts': artifact['parts']
+                        }
+                    })
+            
+            # Send final completion status
+            await self.broker.send_stream_event(params['id'], {
+                'kind': 'status-update',
+                'task_id': params['id'],
+                'context_id': task['context_id'],
+                'status': {'state': 'completed'},
+                'final': True,
+                'metadata': {
+                    'message': 'Task completed successfully',
+                    'token_usage': usage_info
+                }
+            })
+            
             logger.info(f"✅ Task {task['id']} completed successfully")
+            
+            # Send cleanup status
+            await self.broker.send_stream_event(params['id'], {
+                'kind': 'status-update',
+                'task_id': params['id'],
+                'context_id': task['context_id'],
+                'status': {'state': 'working'},
+                'final': False,
+                'metadata': {'message': 'Cleaning up workspace...'}
+            })
             
             # Clean notebook and files after successful completion
             await self._clear_notebook_for_task()
@@ -479,6 +579,19 @@ Your workflow should be:
         except Exception as e:
             logger.error(f"❌ Task processing failed: {e}")
             logger.error(traceback.format_exc())
+            
+            # Send error status update
+            await self.broker.send_stream_event(params['id'], {
+                'kind': 'status-update',
+                'task_id': params['id'],
+                'context_id': task['context_id'],
+                'status': {'state': 'failed'},
+                'final': True,
+                'metadata': {
+                    'message': f'Task failed: {str(e)}',
+                    'error': str(e)
+                }
+            })
             
             # Handle errors
             error_message = Message(
@@ -496,6 +609,19 @@ Your workflow should be:
                 new_messages=[error_message]
             )
             
+            # Send cleanup status for error case (non-blocking)
+            try:
+                await self.broker.send_stream_event(params['id'], {
+                    'kind': 'status-update',
+                    'task_id': params['id'], 
+                    'context_id': task['context_id'],
+                    'status': {'state': 'failed'},
+                    'final': False,
+                    'metadata': {'message': 'Cleaning up after error...'}
+                })
+            except Exception:
+                pass  # Don't let cleanup streaming failure prevent actual cleanup
+                
             # Clean notebook and files after error as well
             await self._clear_notebook_for_task()
             await self._cleanup_new_files()
@@ -652,6 +778,7 @@ def create_purple_agent(card_url: str = None) -> FastA2A:
         url=card_url or "http://localhost:9019",  # Use the provided card_url
         version="2.0.0",
         provider=provider,
+        streaming=True,
         skills=[autonomous_reasoning_skill, computational_skill],
         lifespan=lifespan
     )
